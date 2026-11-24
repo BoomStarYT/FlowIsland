@@ -1,135 +1,131 @@
-[LIES-MICH.md](https://github.com/user-attachments/files/35330258/LIES-MICH.md)
-# Dynamic Island für Windows – Version 1.4
+<p align="center">
+  <img src="assets/icon.png" width="128" alt="FlowIsland icon">
+</p>
 
-Neu in 1.4: **RAM-Begrenzer** (Einstellungen → Verhalten → Arbeitsspeicher) und automatischer Bau auf GitHub.
+<h1 align="center">FlowIsland</h1>
 
+<p align="center">
+  A lightweight, Dynamic Island–style widget for Windows 10 &amp; 11.<br>
+  Live music controls, quick launch and handy widgets – right at the edge of your screen.
+</p>
 
-Neu in 1.3:
-- **Am Rand andocken:** nah an einen Rand ziehen → klebt bündig dran (Ecken dort gerade), geht zur Mitte hin auf
-- **In den Rand eindrücken:** ganz in den Rand schieben → nur ein schmaler leuchtender Streifen bleibt. Klick drauf oder rausziehen = wieder da
-- **Ruheanzeige:** Datum, Uhr, Akku, Leistung (CPU/RAM) oder Minimal – Mausrad über der Insel wechselt
-- **Pause → Ruheanzeige:** pausierte Musik verschwindet nach einstellbarer Zeit
-- **Neue Farben:** 14 abgestimmte Vorlagen, Farbpaletten (Neutral, Pastell, Kräftig, Tief) und „Überrasch mich“
-- **Noch flüssiger:** Inhalt wird während Animationen als Bild zwischengespeichert
+<p align="center">
+  <a href="../../releases/latest"><b>⬇ Download the latest version</b></a>
+</p>
 
-Eine Insel wie beim iPhone, die du überall auf den Bildschirm ziehen kannst.
+---
 
-## Bedienung
+## ✨ Features
 
-| Was | Wie |
+| | |
 |---|---|
-| Aufklappen | Maus drüber (oder Klick – einstellbar) |
-| Verschieben | Insel anklicken und ziehen, wohin du willst. Oben in der Mitte rastet sie ein |
-| Menü | **Doppelklick** → Einstellungen · Zurück · Schliessen |
-| Am Rand andocken | Nah an einen Bildschirmrand ziehen |
-| Eindrücken | Ganz in den Rand schieben (Maus bis an den Bildschirmrand) |
-| Rausholen | Streifen anklicken oder rausziehen |
-| Ruheanzeige wechseln | Mausrad über der zugeklappten Insel |
-| Rechtsklick | Einstellungen, Autostart, Position zurücksetzen, Neu starten, Beenden |
-| Musik | Klick aufs Cover = Spotify öffnen · Balken klicken/ziehen = spulen |
-
-Zugeklappt siehst du sofort, ob Musik läuft:
-- **Läuft:** Equalizer-Balken hüpfen in deiner Akzentfarbe
-- **Pausiert:** Balken liegen flach und grau, Titel und Cover werden blasser
-
-Nahe am Rand geht die Insel automatisch zur Bildschirmmitte hin auf (z. B. unten → nach oben).
-
-## Einstellungen (Doppelklick → Einstellungen)
-
-- **Aussehen:** Vorlagen (Schwarz, Liquid Glass, Sunset, Ozean, Aurora, Xiaomi, Hell …), Stil (Einfarbig / Verlauf / Liquid Glass), Farben, Verlaufs-Winkel, Deckkraft, Akzentfarbe, Grösse, Rundung, Schatten, Schriftart
-- **Verhalten:** Öffnen per Maus oder Klick, Verzögerungen, Animationstempo, Equalizer, Autostart, Vollbild ausblenden, Position zurücksetzen
-- **Funktionen:** Musik, Apps, Tasten, Uhr ein-/ausschalten
-- **Verbindungen:** Musikquelle – nur Spotify oder alle Apps (YouTube, Browser …)
-- **Apps / Tastenkürzel:** Listen direkt bearbeiten
-- **Info:** Einstellungsdatei, Fehlerprotokoll, Neu starten, Beenden
-
-Fast alles wird **sofort** an der Insel übernommen.
-
-> Liquid Glass: Glas-Look mit Lichtkante und Spiegelung. Echter Blur hinter der Insel ist in Windows zusammen mit flüssigen Animationen leider nicht sauber machbar.
+| 🎵 **Now Playing** | Song title, artist and album art from Spotify (or any media app). Play/pause, previous/next and a seekable progress bar. |
+| 🎚️ **Clear playback state** | Animated equalizer while music plays – flat and dimmed when paused. |
+| 🧩 **Tabs** | Music, Apps (quick-launch tiles for programs, folders and links) and a keyboard-shortcut cheat sheet. |
+| 🕒 **Idle widgets** | When nothing is playing: date & time, clock, battery, CPU/RAM usage or a minimal dot. Switch with the mouse wheel. |
+| 🖱️ **Move it anywhere** | Drag the island wherever you like. It snaps to the top center and docks flush against screen edges. |
+| 📥 **Tuck into the edge** | Push it fully into an edge and it shrinks to a slim glowing handle. Click or drag it out to bring it back. |
+| 🎨 **Fully customizable** | Solid, gradient or *Liquid Glass* style, 14 curated color presets, harmonious random palettes, custom fonts, size and corner radius. |
+| ⚡ **Built for efficiency** | Event-driven (no constant polling), GPU-accelerated animations, optional RAM limiter, auto-hides during fullscreen games and videos. |
+| 🔒 **Private by design** | No account, no login, no internet connection, no telemetry. Everything stays on your PC. |
 
 ---
 
-## Installieren / Updaten
+## 🚀 Getting started
 
-1. Läuft die Insel schon? → **Doppelklick → Schliessen**.
-2. ZIP entpacken. Bei einem Update: den Ordner **`src`** im alten DynamicIsland-Ordner durch den neuen ersetzen.
-   (Deine Einstellungen in `App\einstellungen.json` bleiben erhalten.)
-3. Im Explorer den Ordner öffnen, in dem `src` liegt → oben in die Adresszeile `powershell.exe` → Enter.
-4. Diesen Befehl einfügen und Enter (baut die App in den Ordner „DynamicIsland“ in deinem Benutzerordner – nicht in OneDrive):
-   ```
-   dotnet publish src\DynamicIsland.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o $HOME\DynamicIsland\App
-   ```
-5. Wenn es fertig ist:
-   ```
-   start $HOME\DynamicIsland\App\DynamicIsland.exe
-   ```
+1. Download **`DynamicIsland.exe`** from the [latest release](../../releases/latest).
+2. Put it in its own folder (e.g. `Documents\FlowIsland`) – settings are saved next to the file.
+3. Double-click to start.
 
-(Beim allerersten Mal braucht es vorher das .NET SDK: `winget install Microsoft.DotNet.SDK.8`)
+> **Windows SmartScreen:** Because the app is not signed with a paid certificate, Windows may show
+> *“Windows protected your PC”* on first launch. Click **More info → Run anyway**.
+> The full source code is in this repository, so you can verify exactly what it does.
+
+To start FlowIsland automatically with Windows: double-click the island → **Einstellungen → Verhalten → Mit Windows starten** (Settings → Behavior → Start with Windows).
 
 ---
 
-## Zum Teilen: eine .exe, die sofort läuft
+## 🖱️ Controls
 
-Damit Freunde die App einfach herunterladen und doppelklicken können (ohne .NET, ohne Befehle):
+| Action | How |
+|---|---|
+| Expand | Hover over the island (or click – configurable) |
+| Menu | **Double-click** → Settings · Back · Close |
+| Quick menu | **Right-click** |
+| Move | Click and drag |
+| Dock to an edge | Drop it close to a screen edge |
+| Tuck away | Drag it all the way into an edge |
+| Bring back | Click the handle or drag it out |
+| Change idle widget | Mouse wheel over the collapsed island |
+| Seek | Click or drag the progress bar |
+| Open Spotify | Click the album art |
 
-1. Im Ordner mit `src` → Adresszeile → `powershell.exe` → Enter
-2. Einfügen und Enter:
-   ```
-   dotnet publish src\DynamicIsland.csproj -p:PublishProfile=Teilen
-   ```
-3. Fertig: Im neuen Ordner **`Teilen`** liegt **`DynamicIsland.exe`** (ca. 60–80 MB, weil .NET mit drin ist).
-4. Diese eine Datei verschicken (z. B. über OneDrive-/Google-Drive-Link – für WhatsApp ist sie zu gross).
-
-Beim ersten Öffnen zeigt Windows wahrscheinlich „Der Computer wurde durch Windows geschützt“ → **Weitere Informationen → Trotzdem ausführen**.
-Das kommt, weil die App nicht mit einem (kostenpflichtigen) Zertifikat signiert ist – sie ist trotzdem sicher.
-
-Die Einstellungen landen jeweils neben der .exe (`einstellungen.json`) – also am besten die .exe in einen eigenen Ordner legen, nicht direkt in Downloads.
-
----
-
-## Noch einfacher teilen: GitHub baut die .exe automatisch
-
-1. Auf github.com ein neues Repository erstellen (z. B. „DynamicIsland“).
-2. Den ganzen Ordner hochladen („Add file → Upload files“) – inklusive des versteckten Ordners `.github`.
-   (Tipp: GitHub Desktop macht das am einfachsten.)
-3. GitHub baut die App jetzt selbst: Reiter **Actions** → neuester Lauf → unten **DynamicIsland** herunterladen.
-4. Für einen festen Link zum Teilen: rechts **Releases → Create a new release** → Tag `v1.4` → veröffentlichen.
-   Nach 2–3 Minuten hängt dort `DynamicIsland.exe` – diesen Link können Freunde öffnen, herunterladen, doppelklicken.
+In the settings window: **↑ / ↓** scroll, **Page Up / Page Down** jump, **← / →** switch sections.
 
 ---
 
-## RAM-Begrenzer
+## ⚙️ Settings overview
 
-Einstellungen → Verhalten → **Arbeitsspeicher (RAM)**
-- Die Insel misst selbst: **Minimum** (was sie in Ruhe wirklich braucht) und **Maximum** (ab da bringt mehr nichts).
-- Der Schieberegler geht nur zwischen diesen zwei Werten.
-- Tiefer = weniger RAM, aber Windows lagert mehr aus → die Insel kann etwas träger reagieren.
-- Solange das Einstellungsfenster offen ist, gilt keine Grenze. Gemessen wird nach dem Schliessen.
+- **Appearance** – presets, style, colors, gradient angle, opacity, accent color, size, corner radius, shadow, font
+- **Behavior** – open on hover or click, delays, animation speed, edge docking, idle widget, RAM limiter, autostart, fullscreen auto-hide
+- **Features** – turn Music, Apps, Shortcuts and Idle widgets on or off
+- **Connections** – music source: Spotify only or all media apps
+- **Apps / Shortcuts** – edit your quick-launch tiles and cheat sheet directly
 
----
-
-## Eigene Funktionen (Module)
-
-1. In `src\Modules\` die Datei **`BeispielModul.cs`** kopieren und umbenennen.
-2. Klassennamen ändern und `Enabled => true` setzen.
-3. Neu bauen (Schritt 4 oben) → neuer Tab ist da und erscheint auch unter Einstellungen → Funktionen.
-
-Farben, die sich dem Design anpassen: `.Themed(TextBlock.ForegroundProperty, "IslandSubText")`
-(Schlüssel: `IslandText`, `IslandSubText`, `IslandAccent`, `IslandChip`, `IslandHover`, `IslandTrack`, `IslandPlaceholder`)
+### RAM limiter
+FlowIsland measures its own memory needs: the **minimum** it requires to run and the **maximum** beyond which more memory brings no benefit. A slider lets you set a hard limit anywhere between those two values.
 
 ---
 
-## Leistung
+## 💻 Requirements
 
-- Zugeklappt wartet die Insel nur auf Meldungen von Windows (Songwechsel, Pause …).
-- Equalizer: nur wenn Musik läuft und er sichtbar ist, mit 30 statt 60 Bildern/s. Abschaltbar.
-- Fortschrittsbalken: bewegt sich nur, wenn der Musik-Tab offen ist.
-- Uhr: 1 Update pro Minute. Vollbild-Check: alle 1,5 s ein kurzer Blick.
-- Verschieben macht Windows selbst → so flüssig wie ein normales Fenster.
+- Windows 10 (version 2004 or newer) or Windows 11, 64-bit
+- No additional installation needed for the release `.exe`
+- Interface language: German
 
-## Probleme?
+---
 
-- Fehler stehen in `App\fehler.log` (oder Einstellungen → Info → Fehlerprotokoll) → an Claude schicken.
-- Insel weg? Task-Manager → „DynamicIsland“ beenden und `App\DynamicIsland.exe` neu starten.
-- Insel ausserhalb vom Bildschirm? Rechtsklick → „Oben in die Mitte setzen“ (oder Einstellungen → Verhalten).
-- Deinstallieren: Einstellungen → Verhalten → „Mit Windows starten“ aus → Schliessen → Ordner löschen.
+## 🛠️ Build from source
+
+Requires the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
+
+```powershell
+# Standalone single-file .exe (runs without .NET installed)
+dotnet publish src\DynamicIsland.csproj -p:PublishProfile=Teilen
+
+# Smaller build (requires the .NET 8 Desktop Runtime)
+dotnet publish src\DynamicIsland.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o App
+```
+
+Every push and every `v*` tag is built automatically by **GitHub Actions** – tagged builds are attached to the release.
+
+---
+
+## 🧩 Extending with modules
+
+Each part of the island is a module. To add your own tab:
+
+1. Copy `src/Modules/BeispielModul.cs` (template) and rename the class.
+2. Set `Enabled => true`.
+3. Rebuild – the new tab appears automatically and can be toggled under **Settings → Features**.
+
+Ideas: timer, weather, notes, to-do list, system stats.
+
+---
+
+## 📁 Project structure
+
+```
+src/
+├── App.xaml / MainWindow.xaml     # the island window
+├── Core/                          # settings, theming, animations, RAM limiter, Windows APIs
+├── Modules/                       # Music, Apps, Shortcuts, Idle widgets (+ template)
+└── Settings/                      # settings window (macOS-style)
+.github/workflows/build.yml        # automatic builds & releases
+```
+
+---
+
+<p align="center">
+  Built with C# and WPF · Inspired by Apple's Dynamic Island · Not affiliated with Apple Inc.
+</p>

@@ -1,0 +1,37 @@
+# Baut automatisch die "Teilen"-Version (eine .exe, die sofort läuft), sobald du auf GitHub etwas hochlädst.
+# Download: GitHub → Actions → neuester Lauf → "DynamicIsland" (Artefakt)
+# Für einen festen Download-Link: einen Tag wie v1.4 erstellen → erscheint unter "Releases".
+name: Build
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Teilen-Version bauen
+        run: dotnet publish src/DynamicIsland.csproj -p:PublishProfile=Teilen
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DynamicIsland
+          path: Teilen/DynamicIsland.exe
+
+      - name: Release erstellen (nur bei Tags wie v1.4)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Teilen/DynamicIsland.exe

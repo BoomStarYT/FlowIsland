@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- 10.0.19041 = Windows 10 (2004) oder neuer; nötig für die Windows-Mediensteuerung -->
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>DynamicIsland</AssemblyName>
+    <RootNamespace>Island</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>icon.ico</ApplicationIcon>
+    <Version>1.4.0</Version>
+
+    <!-- Läuft auch, wenn nur eine neuere .NET-Version installiert ist -->
+    <RollForward>Major</RollForward>
+
+    <!-- So wenig RAM / CPU wie möglich -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <TieredPGO>true</TieredPGO>
+    <SatelliteResourceLanguages>de</SatelliteResourceLanguages>
+    <DebugType>none</DebugType> <!-- keine Pfade vom eigenen PC in der .exe -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Icon auch im Programm verfügbar (für das Einstellungsfenster) -->
+    <Resource Include="icon.ico" />
+    <!-- Garbage Collector: lieber etwas öfter aufräumen als RAM horten (0–9, 5 = ausgewogen) -->
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
+  </ItemGroup>
+
+</Project>

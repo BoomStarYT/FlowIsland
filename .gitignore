@@ -1,0 +1,10 @@
+# Build-Ergebnisse
+bin/
+obj/
+App/
+Teilen/
+
+# Persönliche Dateien – niemals hochladen
+einstellungen.json
+fehler.log
+*.log
