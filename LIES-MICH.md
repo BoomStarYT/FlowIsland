@@ -35,11 +35,12 @@ Nahe am Rand geht die Insel automatisch zur Bildschirmmitte hin auf (z. B. unten
 
 ## Einstellungen (Doppelklick → Einstellungen)
 
-- **Aussehen:** Vorlagen (Schwarz, Liquid Glass, Sunset, Ozean, Aurora, Xiaomi, Hell …), Stil (Einfarbig / Verlauf / Liquid Glass), Farben, Verlaufs-Winkel, Deckkraft, Akzentfarbe, Grösse, Rundung, Schatten, Schriftart
+- **Aussehen:** Vorlagen, **Meine Designs** (eigene Designs mit Namen speichern, anwenden, löschen – nur lokal), Stil (Einfarbig / Verlauf / Liquid Glass / **Klarglas** mit Regler Wolkig ↔ Klar), Farben, Verlaufs-Winkel, Deckkraft, Akzentfarbe, Grösse, Rundung, Schatten, Schriftart
 - **Verhalten:** Öffnen per Maus oder Klick, Verzögerungen, Animationstempo, Equalizer, Autostart, Vollbild ausblenden, Position zurücksetzen
 - **Funktionen:** Musik, Apps, Tasten, Uhr ein-/ausschalten
 - **Verbindungen:** Musikquelle – nur Spotify oder alle Apps (YouTube, Browser …)
-- **Apps / Tastenkürzel:** Listen direkt bearbeiten
+- **Apps:** aus installierten Apps wählen (mit Suche), Programme/Ordner/Webseiten hinzufügen oder einfach ins Fenster ziehen
+- **Tastenkürzel:** beliebte Windows-Kürzel antippen oder eigene aufnehmen (Knopf drücken, dann Tasten drücken)
 - **Info:** Einstellungsdatei, Fehlerprotokoll, Neu starten, Beenden
 
 Fast alles wird **sofort** an der Insel übernommen.

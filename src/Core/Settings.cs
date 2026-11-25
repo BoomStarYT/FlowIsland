@@ -13,7 +13,7 @@ public sealed class Settings
 {
     // ------------------------------------------------------------------ Aussehen
 
-    /// <summary>"Einfarbig", "Verlauf" oder "Liquid Glass".</summary>
+    /// <summary>"Einfarbig", "Verlauf", "Liquid Glass" oder "Klarglas".</summary>
     public string Stil { get; set; } = "Einfarbig";
     public string Farbe1 { get; set; } = "#0A0A0C";
     public string Farbe2 { get; set; } = "#3A1C71";
@@ -28,6 +28,12 @@ public sealed class Settings
     /// <summary>Ecken-Rundung im aufgeklappten Zustand.</summary>
     public double Rundung { get; set; } = 26;
     public bool Schatten { get; set; } = true;
+
+    /// <summary>Nur für "Klarglas": 0 = wolkig/milchig, 1 = ganz klar.</summary>
+    public double GlasKlarheit { get; set; } = 0.6;
+
+    /// <summary>Selbst gespeicherte Designs (lokal, nur in dieser Datei).</summary>
+    public List<DesignEintrag> EigeneDesigns { get; set; } = new();
 
     // ------------------------------------------------------------------ Verhalten
 
@@ -218,4 +224,51 @@ public sealed class TastenEintrag
 {
     public string Tasten { get; set; } = "";
     public string Beschreibung { get; set; } = "";
+}
+
+/// <summary>Ein gespeichertes Design (Farben, Stil, Glas, Rundung, Schrift).</summary>
+public sealed class DesignEintrag
+{
+    public string Name { get; set; } = "";
+    public string Stil { get; set; } = "Einfarbig";
+    public string Farbe1 { get; set; } = "#0A0A0C";
+    public string Farbe2 { get; set; } = "#0A0A0C";
+    public double VerlaufWinkel { get; set; } = 135;
+    public double Deckkraft { get; set; } = 1.0;
+    public string Akzent { get; set; } = "#30D158";
+    public double GlasKlarheit { get; set; } = 0.6;
+
+    /// <summary>null = beim Anwenden nicht ändern (Vorlagen lassen deine Rundung/Schrift in Ruhe).</summary>
+    public double? Rundung { get; set; }
+    public bool? Schatten { get; set; }
+    public string? Schriftart { get; set; }
+
+    public static DesignEintrag From(Settings s, string name) => new()
+    {
+        Name = name,
+        Stil = s.Stil,
+        Farbe1 = s.Farbe1,
+        Farbe2 = s.Farbe2,
+        VerlaufWinkel = s.VerlaufWinkel,
+        Deckkraft = s.Deckkraft,
+        Akzent = s.Akzent,
+        GlasKlarheit = s.GlasKlarheit,
+        Rundung = s.Rundung,
+        Schatten = s.Schatten,
+        Schriftart = s.Schriftart,
+    };
+
+    public void ApplyTo(Settings s)
+    {
+        s.Stil = Stil;
+        s.Farbe1 = Farbe1;
+        s.Farbe2 = Farbe2;
+        s.VerlaufWinkel = VerlaufWinkel;
+        s.Deckkraft = Deckkraft;
+        s.Akzent = Akzent;
+        s.GlasKlarheit = GlasKlarheit;
+        if (Rundung is double r) s.Rundung = r;
+        if (Schatten is bool sh) s.Schatten = sh;
+        if (!string.IsNullOrWhiteSpace(Schriftart)) s.Schriftart = Schriftart!;
+    }
 }

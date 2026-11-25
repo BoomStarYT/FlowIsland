@@ -25,7 +25,9 @@
 | 🕒 **Idle widgets** | When nothing is playing: date & time, clock, battery, CPU/RAM usage or a minimal dot. Switch with the mouse wheel. |
 | 🖱️ **Move it anywhere** | Drag the island wherever you like. It snaps to the top center and docks flush against screen edges. |
 | 📥 **Tuck into the edge** | Push it fully into an edge and it shrinks to a slim glowing handle. Click or drag it out to bring it back. |
-| 🎨 **Fully customizable** | Solid, gradient or *Liquid Glass* style, 14 curated color presets, harmonious random palettes, custom fonts, size and corner radius. |
+| 🎨 **Fully customizable** | Solid, gradient, tinted *Liquid Glass* or colorless *Clear Glass* with a frosted ↔ clear slider. 16 curated presets, random palettes, custom fonts, size and corner radius. |
+| 💾 **Your own themes** | Save your current look under a name and switch back with one click. Stored locally on your PC. |
+| ⌨️ **Easy shortcuts** | Pick apps from your Start menu with search and icons, drag & drop files and folders, tap popular Windows shortcuts or record your own key combo. |
 | ⚡ **Built for efficiency** | Event-driven (no constant polling), GPU-accelerated animations, optional RAM limiter, auto-hides during fullscreen games and videos. |
 | 🔒 **Private by design** | No account, no login, no internet connection, no telemetry. Everything stays on your PC. |
 
@@ -66,11 +68,12 @@ In the settings window: **↑ / ↓** scroll, **Page Up / Page Down** jump, **�
 
 ## ⚙️ Settings overview
 
-- **Appearance** – presets, style, colors, gradient angle, opacity, accent color, size, corner radius, shadow, font
+- **Appearance** – presets, *My themes* (save / apply / delete), style incl. Clear Glass with frosted ↔ clear slider, colors, gradient angle, opacity, accent color, size, corner radius, shadow, font
 - **Behavior** – open on hover or click, delays, animation speed, edge docking, idle widget, RAM limiter, autostart, fullscreen auto-hide
 - **Features** – turn Music, Apps, Shortcuts and Idle widgets on or off
 - **Connections** – music source: Spotify only or all media apps
-- **Apps / Shortcuts** – edit your quick-launch tiles and cheat sheet directly
+- **Apps** – choose from installed apps, add programs, folders or websites, or drag & drop them into the window
+- **Shortcuts** – one-tap library of popular Windows shortcuts, record key combos by pressing them
 
 ### RAM limiter
 FlowIsland measures its own memory needs: the **minimum** it requires to run and the **maximum** beyond which more memory brings no benefit. A slider lets you set a hard limit anywhere between those two values.

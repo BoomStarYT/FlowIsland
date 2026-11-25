@@ -12,6 +12,7 @@ public static class Theme
     public const string Solid = "Einfarbig";
     public const string Gradient = "Verlauf";
     public const string Glass = "Liquid Glass";
+    public const string PureGlass = "Klarglas";
 
     public static void Apply(Settings s, Border background, Border sheen, Border rim, UIElement shadow)
     {
@@ -24,7 +25,33 @@ public static class Theme
         double rimThickness = 1;
         Color reference; // für die Entscheidung helle oder dunkle Schrift
 
-        if (style == Glass)
+        if (style == PureGlass)
+        {
+            // Reines Glas ohne Farbe: wolkig = milchig-weiss, klar = fast durchsichtig.
+            // Bei klarem Glas liegt ein ganz leichter dunkler Kern darunter, damit Text lesbar bleibt.
+            var clear = Math.Clamp(s.GlasKlarheit, 0, 1);
+            var dark = Lerp(0.0, 0.24, clear);
+            var top = Over(Colors.White, Lerp(0.62, 0.10, clear), Colors.Black, dark);
+            var bottom = Over(Colors.White, Lerp(0.46, 0.04, clear), Colors.Black, dark);
+            fill = Freeze(Linear(90, (top, 0), (bottom, 1)));
+
+            sheenBrush = Freeze(Linear(90,
+                (WithAlpha(Colors.White, (byte)Lerp(70, 120, clear)), 0.00),
+                (WithAlpha(Colors.White, (byte)Lerp(18, 34, clear)), 0.30),
+                (WithAlpha(Colors.White, 0), 0.52),
+                (WithAlpha(Colors.White, 0), 0.80),
+                (WithAlpha(Colors.White, (byte)Lerp(16, 40, clear)), 1.00)));
+
+            rimBrush = Freeze(Linear(120,
+                (WithAlpha(Colors.White, 230), 0.00),
+                (WithAlpha(Colors.White, 50), 0.35),
+                (WithAlpha(Colors.White, 20), 0.65),
+                (WithAlpha(Colors.White, 160), 1.00)));
+            rimThickness = 1.4;
+            // Wolkig (hell) → dunkle Schrift, klar → helle Schrift
+            reference = clear < 0.45 ? Colors.White : Colors.Black;
+        }
+        else if (style == Glass)
         {
             // Getöntes, durchsichtiges Glas mit Lichtkante oben und Spiegelung
             var alphaTop = (byte)(255 * (0.30 + 0.42 * opacity));
@@ -72,7 +99,7 @@ public static class Theme
         // Kein echter Weichzeichner-Schatten (DropShadowEffect) – der macht Animationen ruckelig.
         background.Effect = null;
         shadow.Visibility = s.Schatten ? Visibility.Visible : Visibility.Collapsed;
-        shadow.Opacity = style == Glass ? 0.6 : 1.0;
+        shadow.Opacity = style == Glass ? 0.6 : style == PureGlass ? 0.45 : 1.0;
 
         ApplyTextColors(IsLight(reference), ParseColor(s.Akzent, Color.FromRgb(48, 209, 88)));
     }
@@ -166,6 +193,17 @@ public static class Theme
     public static bool IsLight(Color c) => (0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B) / 255.0 > 0.62;
 
     private static Color WithAlpha(Color c, byte a) => Color.FromArgb(a, c.R, c.G, c.B);
+
+    private static double Lerp(double a, double b, double t) => a + (b - a) * t;
+
+    /// <summary>Farbe "oben" (mit Deckkraft) über Farbe "unten" (mit Deckkraft) gelegt → eine Farbe mit Alpha.</summary>
+    private static Color Over(Color top, double topAlpha, Color bottom, double bottomAlpha)
+    {
+        var a = topAlpha + bottomAlpha * (1 - topAlpha);
+        if (a <= 0.0001) return Color.FromArgb(0, 0, 0, 0);
+        byte Mix(byte t, byte b) => (byte)Math.Round((t * topAlpha + b * bottomAlpha * (1 - topAlpha)) / a);
+        return Color.FromArgb((byte)Math.Round(a * 255), Mix(top.R, bottom.R), Mix(top.G, bottom.G), Mix(top.B, bottom.B));
+    }
 
     private static Color Lighten(Color c, double amount) => Color.FromRgb(
         (byte)(c.R + (255 - c.R) * amount),
