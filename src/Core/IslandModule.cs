@@ -34,6 +34,11 @@ public interface IIslandModule : IDisposable
     /// Das erste Modul (nach Order), das true sagt, gewinnt.</summary>
     bool WantsCompact { get; }
 
+    /// <summary>Ansicht für "halb offen" (zwischen zu und ganz offen). null = keine.</summary>
+    FrameworkElement? MediumView { get; }
+    double MediumWidth { get; }
+    double MediumHeight { get; }
+
     /// <summary>Ansicht für die aufgeklappte Insel (null = kein Tab).</summary>
     FrameworkElement? ExpandedView { get; }
 
@@ -64,6 +69,10 @@ public abstract class IslandModule : IIslandModule
     public virtual FrameworkElement? CompactView => null;
     public virtual double CompactWidth => 180;
     public virtual bool WantsCompact => false;
+
+    public virtual FrameworkElement? MediumView => null;
+    public virtual double MediumWidth => 360;
+    public virtual double MediumHeight => 64;
 
     public virtual FrameworkElement? ExpandedView => null;
     public virtual double ExpandedHeight => 150;

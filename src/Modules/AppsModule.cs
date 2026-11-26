@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Island.Core;
@@ -10,7 +12,10 @@ using Microsoft.Win32;
 
 namespace Island.Modules;
 
-/// <summary>Schnellstart-Kacheln für Apps, Ordner und Links. Bearbeiten: Einstellungen → Apps.</summary>
+/// <summary>
+/// Schnellstart-Kacheln für Apps, Ordner und Links – mit eigenen Ordnern wie am Handy.
+/// Bearbeiten: Einstellungen → Apps, oder Dateien einfach auf die Insel ziehen.
+/// </summary>
 public sealed class AppsModule : IslandModule
 {
     public override string Name => "Apps";
@@ -19,17 +24,40 @@ public sealed class AppsModule : IslandModule
     public override double ExpandedHeight => 140;
     public override FrameworkElement? ExpandedView => _root;
 
-    private ScrollViewer _root = null!;
+    private Grid _root = null!;
+    private ScrollViewer _scroll = null!;
+    private Grid _header = null!;
+    private TextBlock _headerTitle = null!;
+    private TranslateTransform _slide = null!;
     private string _signature = "";
+    private string? _openFolder;
+    private static readonly Dictionary<string, BitmapSource?> IconCache = new(StringComparer.OrdinalIgnoreCase);
 
     protected override void OnInitialize()
     {
-        _root = new ScrollViewer
+        _root = new Grid();
+        _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        _root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+
+        // Kopfzeile, wenn ein Ordner offen ist
+        _header = new Grid { Visibility = Visibility.Collapsed, Margin = new Thickness(0, -4, 0, 2) };
+        var back = new Button { Content = "", Style = Ui.Style("IconButton"), Width = 26, Height = 26, FontSize = 12, HorizontalAlignment = HorizontalAlignment.Left, ToolTip = "Zurück" };
+        back.Click += (_, _) => OpenFolder(null);
+        _headerTitle = new TextBlock { FontSize = 13, FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        _header.Children.Add(back);
+        _header.Children.Add(_headerTitle);
+
+        _slide = new TranslateTransform();
+        _scroll = new ScrollViewer
         {
             VerticalScrollBarVisibility = ScrollBarVisibility.Hidden, // Mausrad geht trotzdem
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             Focusable = false,
+            RenderTransform = _slide,
         };
+        Grid.SetRow(_scroll, 1);
+        _root.Children.Add(_header);
+        _root.Children.Add(_scroll);
         Rebuild();
     }
 
@@ -39,109 +67,183 @@ public sealed class AppsModule : IslandModule
         if (Signature() != _signature) Rebuild();
     }
 
-    private string Signature() => string.Join("\n", Context.Settings.Schnellstart.Select(e => $"{e.Name}|{e.Ziel}|{e.Icon}|{e.Argumente}"));
+    public override void OnHidden()
+    {
+        // Beim nächsten Öffnen wieder auf der Startseite
+        if (_openFolder == null) return;
+        _openFolder = null;
+        Rebuild();
+    }
+
+    private string Signature() => string.Join("\n", Context.Settings.Schnellstart.Select(e => $"{e.Name}|{e.Ziel}|{e.Icon}|{e.Argumente}|{e.Ordner}"))
+                                  + "#" + string.Join("|", Context.Settings.AppOrdner);
+
+    private void OpenFolder(string? folder)
+    {
+        var forward = folder != null;
+        _openFolder = folder;
+        Rebuild();
+        Anim.To(_slide, TranslateTransform.XProperty, 0, 420, Anim.Spring, from: forward ? 26 : -26);
+        Anim.To(_scroll, UIElement.OpacityProperty, 1, 220, Anim.Smooth, from: 0);
+    }
 
     private void Rebuild()
     {
         _signature = Signature();
-        var wrap = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Center };
+        var s = Context.Settings;
+        var folders = s.AppOrdner.Where(f => !string.IsNullOrWhiteSpace(f)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (_openFolder != null && !folders.Contains(_openFolder, StringComparer.OrdinalIgnoreCase)) _openFolder = null;
 
-        foreach (var entry in Context.Settings.Schnellstart)
+        _header.Visibility = _openFolder != null ? Visibility.Visible : Visibility.Collapsed;
+        _headerTitle.Text = _openFolder ?? "";
+
+        var wrap = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Center };
+        bool InFolder(SchnellstartEintrag e, string? f) =>
+            f == null ? string.IsNullOrWhiteSpace(e.Ordner) || !folders.Contains(e.Ordner!, StringComparer.OrdinalIgnoreCase)
+                      : string.Equals(e.Ordner, f, StringComparison.OrdinalIgnoreCase);
+
+        if (_openFolder == null)
         {
-            if (string.IsNullOrWhiteSpace(entry.Ziel)) continue;
+            foreach (var folder in folders)
+            {
+                var apps = s.Schnellstart.Where(e => InFolder(e, folder) && !string.IsNullOrWhiteSpace(e.Ziel)).ToList();
+                wrap.Children.Add(CreateFolderTile(folder, apps));
+            }
+        }
+
+        foreach (var entry in s.Schnellstart)
+        {
+            if (string.IsNullOrWhiteSpace(entry.Ziel) || !InFolder(entry, _openFolder)) continue;
             wrap.Children.Add(CreateTile(entry));
         }
 
-        if (wrap.Children.Count == 0)
-        {
-            wrap.Children.Add(new TextBlock
-            {
-                Text = "Noch keine Apps.\nDoppelklick auf die Insel → Einstellungen → Apps",
-                TextAlignment = TextAlignment.Center,
-                Margin = new Thickness(0, 34, 0, 0),
-            }.Themed(TextBlock.ForegroundProperty, "IslandSubText"));
-        }
-
-        _root.Content = wrap;
+        if (_openFolder == null) wrap.Children.Add(CreateAddTile());
+        _scroll.Content = wrap;
     }
 
-    private static Button CreateTile(SchnellstartEintrag entry)
+    private Button CreateTile(SchnellstartEintrag entry)
     {
-        FrameworkElement icon;
-        var bitmap = TryGetIcon(entry);
-        if (bitmap != null)
-        {
-            icon = new Image { Source = bitmap, Width = 30, Height = 30 };
-            RenderOptions.SetBitmapScalingMode(icon, BitmapScalingMode.HighQuality);
-        }
-        else
-        {
-            icon = new Border
-            {
-                Width = 30,
-                Height = 30,
-                CornerRadius = new CornerRadius(9),
-                Child = new TextBlock
-                {
-                    Text = entry.Name.Length > 0 ? entry.Name[..1].ToUpperInvariant() : "?",
-                    FontWeight = FontWeights.SemiBold,
-                    FontSize = 14,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                },
-            }.Themed(Border.BackgroundProperty, "IslandChip");
-        }
+        var button = Tile(AppIcon(entry), entry.Name);
+        button.ToolTip = entry.Ziel;
+        button.Click += (_, _) => IslandContext.Open(entry.Ziel, entry.Argumente);
+        return button;
+    }
 
+    /// <summary>Ordner wie am Handy: kleine Vorschau der ersten vier Apps.</summary>
+    private Button CreateFolderTile(string folder, List<SchnellstartEintrag> apps)
+    {
+        var grid = new UniformGrid { Rows = 2, Columns = 2, Width = 26, Height = 26 };
+        foreach (var app in apps.Take(4))
+        {
+            var mini = AppIcon(app, 11);
+            mini.Margin = new Thickness(0.5);
+            grid.Children.Add(mini);
+        }
+        var box = new Border
+        {
+            Width = 34, Height = 34, CornerRadius = new CornerRadius(10), Padding = new Thickness(4), Child = grid,
+        }.Themed(Border.BackgroundProperty, "IslandChip");
+
+        var button = Tile(box, folder);
+        button.ToolTip = $"{folder} ({apps.Count})";
+        button.Click += (_, _) => OpenFolder(folder);
+        return button;
+    }
+
+    private Button CreateAddTile()
+    {
+        var plus = new Border
+        {
+            Width = 30, Height = 30, CornerRadius = new CornerRadius(9), BorderThickness = new Thickness(1.2),
+            Child = new TextBlock { Text = "", FontFamily = Ui.IconFont, FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
+                .Themed(TextBlock.ForegroundProperty, "IslandSubText"),
+        }.Themed(Border.BorderBrushProperty, "IslandTrack");
+        var button = Tile(plus, "Hinzufügen");
+        button.ToolTip = "Apps & Ordner bearbeiten – oder Dateien einfach auf die Insel ziehen";
+        button.Click += (_, _) => Context.OpenSettings("Apps");
+        return button;
+    }
+
+    private static Button Tile(FrameworkElement icon, string name)
+    {
         var content = new StackPanel();
         icon.HorizontalAlignment = HorizontalAlignment.Center;
         content.Children.Add(icon);
         content.Children.Add(new TextBlock
         {
-            Text = entry.Name,
+            Text = name,
             FontSize = 10.5,
             Margin = new Thickness(0, 5, 0, 0),
             MaxWidth = 68,
             TextTrimming = TextTrimming.CharacterEllipsis,
             HorizontalAlignment = HorizontalAlignment.Center,
         });
+        return new Button { Content = content, Style = Ui.Style("TileButton") };
+    }
 
-        var button = new Button { Content = content, Style = Ui.Style("TileButton"), ToolTip = entry.Ziel };
-        button.Click += (_, _) => IslandContext.Open(entry.Ziel, entry.Argumente);
-        return button;
+    private static FrameworkElement AppIcon(SchnellstartEintrag entry, double size = 30)
+    {
+        var bitmap = TryGetIcon(entry);
+        if (bitmap != null)
+        {
+            var image = new Image { Source = bitmap, Width = size, Height = size };
+            RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
+            return image;
+        }
+
+        return new Border
+        {
+            Width = size,
+            Height = size,
+            CornerRadius = new CornerRadius(size * 0.3),
+            Child = new TextBlock
+            {
+                Text = entry.Name.Length > 0 ? entry.Name[..1].ToUpperInvariant() : "?",
+                FontWeight = FontWeights.SemiBold,
+                FontSize = size * 0.47,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
+        }.Themed(Border.BackgroundProperty, "IslandChip");
     }
 
     /// <summary>Sucht das passende Symbol (eigene .exe, Ordner, System-Programm oder installierte App).</summary>
     private static BitmapSource? TryGetIcon(SchnellstartEintrag entry)
     {
+        var candidate = Environment.ExpandEnvironmentVariables(
+            string.IsNullOrWhiteSpace(entry.Icon) ? entry.Ziel : entry.Icon!).Trim('"');
+        if (IconCache.TryGetValue(candidate, out var cached)) return cached;
+
+        BitmapSource? result = null;
         try
         {
-            var candidate = Environment.ExpandEnvironmentVariables(
-                string.IsNullOrWhiteSpace(entry.Icon) ? entry.Ziel : entry.Icon!).Trim('"');
-
             if (File.Exists(candidate) || Directory.Exists(candidate))
-                return Native.GetIcon(candidate);
-
-            if (!candidate.Contains('\\') && candidate.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                result = Native.GetIcon(candidate);
+            else if (!candidate.Contains('\\') && candidate.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
             {
                 foreach (var dir in new[] { Environment.SystemDirectory, Environment.GetFolderPath(Environment.SpecialFolder.Windows) })
                 {
                     var path = Path.Combine(dir, candidate);
-                    if (File.Exists(path)) return Native.GetIcon(path);
+                    if (File.Exists(path)) { result = Native.GetIcon(path); break; }
                 }
 
                 // Installierte Programme wie chrome.exe stehen unter "App Paths"
-                const string appPaths = @"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\";
-                using var key = Registry.CurrentUser.OpenSubKey(appPaths + candidate)
-                             ?? Registry.LocalMachine.OpenSubKey(appPaths + candidate);
-                if (key?.GetValue(null) is string registered)
+                if (result == null)
                 {
-                    registered = Environment.ExpandEnvironmentVariables(registered.Trim('"'));
-                    if (File.Exists(registered)) return Native.GetIcon(registered);
+                    const string appPaths = @"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\";
+                    using var key = Registry.CurrentUser.OpenSubKey(appPaths + candidate)
+                                 ?? Registry.LocalMachine.OpenSubKey(appPaths + candidate);
+                    if (key?.GetValue(null) is string registered)
+                    {
+                        registered = Environment.ExpandEnvironmentVariables(registered.Trim('"'));
+                        if (File.Exists(registered)) result = Native.GetIcon(registered);
+                    }
                 }
             }
         }
         catch (Exception ex) { App.Log(ex); }
 
-        return null;
+        IconCache[candidate] = result;
+        return result;
     }
 }

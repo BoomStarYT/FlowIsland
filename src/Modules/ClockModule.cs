@@ -17,7 +17,7 @@ namespace Island.Modules;
 /// </summary>
 public sealed class ClockModule : IslandModule
 {
-    public static readonly string[] Modes = { "Datum", "Uhr", "Akku", "Leistung", "Minimal" };
+    public static readonly string[] Modes = { "Datum", "Uhr", "Wetter", "Akku", "Leistung", "Minimal" };
     private static readonly CultureInfo German = new("de-CH");
     private static readonly SolidColorBrush LowBattery = Ui.Brush("#FF453A");
 
@@ -26,10 +26,14 @@ public sealed class ClockModule : IslandModule
     public override int Order => 100;          // ganz hinten = nur, wenn sonst nichts angezeigt wird
     public override bool WantsCompact => true;
     public override FrameworkElement? CompactView => _root;
+    public override FrameworkElement? MediumView => _medium;
+    public override double MediumWidth => 300;
+    public override double MediumHeight => 62;
 
     public override double CompactWidth => _mode switch
     {
         "Uhr" => 110,
+        "Wetter" => 150,
         "Akku" => 170,
         "Leistung" => 214,
         "Minimal" => 64,
@@ -45,6 +49,14 @@ public sealed class ClockModule : IslandModule
     private TextBlock _batteryText = null!, _batteryBolt = null!, _batteryTime = null!, _cpu = null!, _ram = null!;
     private Border _batteryFill = null!;
     private Ellipse _dot = null!;
+    private StackPanel _weatherPanel = null!;
+    private WeatherIcon _weatherIcon = null!;
+    private TextBlock _weatherText = null!;
+
+    // Halb offen: grosse Uhr + Datum + Wetter
+    private Grid _medium = null!;
+    private TextBlock _mTime = null!, _mDate = null!, _mWeather = null!;
+    private WeatherIcon _mWeatherIcon = null!;
 
     protected override void OnInitialize()
     {
@@ -87,6 +99,15 @@ public sealed class ClockModule : IslandModule
         _dot = new Ellipse { Width = 8, Height = 8, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         _dot.SetResourceReference(Shape.FillProperty, "IslandAccent");
 
+        // --- Wetter
+        _weatherIcon = new WeatherIcon(18) { VerticalAlignment = VerticalAlignment.Center };
+        _weatherText = new TextBlock { FontSize = 13, FontWeight = FontWeights.SemiBold, Margin = new Thickness(7, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        _weatherPanel = Row(_weatherIcon, _weatherText);
+        _root.Children.Add(_weatherPanel);
+        WeatherService.Updated += OnWeather;
+
+        BuildMedium();
+
         _root.Children.Add(_datePanel);
         _root.Children.Add(_bigTime);
         _root.Children.Add(_batteryPanel);
@@ -120,6 +141,8 @@ public sealed class ClockModule : IslandModule
         _mode = Array.IndexOf(Modes, mode) >= 0 ? mode : "Datum";
         _datePanel.Visibility = _mode == "Datum" ? Visibility.Visible : Visibility.Collapsed;
         _bigTime.Visibility = _mode == "Uhr" ? Visibility.Visible : Visibility.Collapsed;
+        _weatherPanel.Visibility = _mode == "Wetter" ? Visibility.Visible : Visibility.Collapsed;
+        if (_mode == "Wetter") WeatherService.Start(Context.Settings);
         _batteryPanel.Visibility = _mode == "Akku" ? Visibility.Visible : Visibility.Collapsed;
         _perfPanel.Visibility = _mode == "Leistung" ? Visibility.Visible : Visibility.Collapsed;
         _dot.Visibility = _mode == "Minimal" ? Visibility.Visible : Visibility.Collapsed;
@@ -170,6 +193,22 @@ public sealed class ClockModule : IslandModule
             case "Minimal":
                 break;
 
+            case "Wetter":
+                var w = WeatherService.Current;
+                if (w != null)
+                {
+                    _weatherIcon.Code = w.Code;
+                    _weatherIcon.IsDay = w.IsDay;
+                    _weatherIcon.Visibility = Visibility.Visible;
+                    _weatherText.Text = $"{Math.Round(w.Temp):0}°  " + now.ToString("HH:mm", German);
+                }
+                else
+                {
+                    _weatherIcon.Visibility = Visibility.Collapsed;
+                    _weatherText.Text = WeatherService.Configured(Context.Settings) ? "…" : "Ort fehlt";
+                }
+                break;
+
             default:
                 _date.Text = now.ToString("ddd d. MMM", German);
                 _time.Text = now.ToString("HH:mm", German);
@@ -177,10 +216,71 @@ public sealed class ClockModule : IslandModule
         }
     }
 
+    private void OnWeather()
+    {
+        if (_mode == "Wetter") Update();
+        UpdateMedium();
+    }
+
+    private void BuildMedium()
+    {
+        _medium = new Grid();
+        _medium.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        _medium.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        _mTime = new TextBlock { FontSize = 26, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 14, 0) };
+        var right = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        _mDate = new TextBlock { FontSize = 12.5, FontWeight = FontWeights.SemiBold };
+        var weather = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 0) };
+        _mWeatherIcon = new WeatherIcon(15) { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 5, 0) };
+        _mWeather = new TextBlock { FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center }.Themed(TextBlock.ForegroundProperty, "IslandSubText");
+        weather.Children.Add(_mWeatherIcon);
+        weather.Children.Add(_mWeather);
+        right.Children.Add(_mDate);
+        right.Children.Add(weather);
+        Grid.SetColumn(right, 1);
+        _medium.Children.Add(_mTime);
+        _medium.Children.Add(right);
+        _medium.IsVisibleChanged += (_, _) =>
+        {
+            if (!_medium.IsVisible) return;
+            if (WeatherService.Configured(Context.Settings)) WeatherService.Start(Context.Settings);
+            UpdateMedium();
+            RestartTimer();
+        };
+    }
+
+    private void UpdateMedium()
+    {
+        var now = DateTime.Now;
+        _mTime.Text = now.ToString("HH:mm", German);
+        _mDate.Text = now.ToString("dddd, d. MMMM", German);
+        var w = WeatherService.Current;
+        if (w != null)
+        {
+            _mWeatherIcon.Visibility = Visibility.Visible;
+            _mWeatherIcon.Code = w.Code;
+            _mWeatherIcon.IsDay = w.IsDay;
+            _mWeather.Text = $"{Math.Round(w.Temp):0}° · {WeatherService.Describe(w.Code)}";
+        }
+        else
+        {
+            _mWeatherIcon.Visibility = Visibility.Collapsed;
+            var battery = Native.GetBattery();
+            _mWeather.Text = battery is { } b ? $"Akku {b.Percent} %" : "Schönen Tag!";
+        }
+    }
+
     /// <summary>Nur aktualisieren, wenn man es sieht. Uhr: genau zur vollen Minute.</summary>
     private void RestartTimer()
     {
         _timer.Stop();
+        if (_medium.IsVisible)
+        {
+            UpdateMedium();
+            _timer.Interval = TimeSpan.FromSeconds(60 - DateTime.Now.Second) + TimeSpan.FromMilliseconds(100);
+            _timer.Start();
+            return;
+        }
         if (!_root.IsVisible || _mode == "Minimal") return;
 
         _timer.Interval = _mode switch
@@ -208,5 +308,9 @@ public sealed class ClockModule : IslandModule
         VerticalAlignment = VerticalAlignment.Center,
     }.Themed(TextBlock.ForegroundProperty, "IslandSubText");
 
-    public override void Dispose() => _timer.Stop();
+    public override void Dispose()
+    {
+        _timer.Stop();
+        WeatherService.Updated -= OnWeather;
+    }
 }

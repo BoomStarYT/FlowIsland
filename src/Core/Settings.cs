@@ -13,7 +13,7 @@ public sealed class Settings
 {
     // ------------------------------------------------------------------ Aussehen
 
-    /// <summary>"Einfarbig", "Verlauf", "Liquid Glass" oder "Klarglas".</summary>
+    /// <summary>"Einfarbig", "Verlauf", "Liquid Glass", "Klarglas" oder "Cover" (dunkel + Farben vom Song-Cover).</summary>
     public string Stil { get; set; } = "Einfarbig";
     public string Farbe1 { get; set; } = "#0A0A0C";
     public string Farbe2 { get; set; } = "#3A1C71";
@@ -32,6 +32,12 @@ public sealed class Settings
     /// <summary>Nur für "Klarglas": 0 = wolkig/milchig, 1 = ganz klar.</summary>
     public double GlasKlarheit { get; set; } = 0.6;
 
+    /// <summary>Akzentfarbe automatisch aus dem Cover des laufenden Songs nehmen.</summary>
+    public bool AkzentVomCover { get; set; }
+
+    /// <summary>Aussehen des Fortschrittsbalkens, z. B. "Welle", "Linie", "Katze", "DNA" (siehe ProgressStyles).</summary>
+    public string Fortschritt { get; set; } = "Welle";
+
     /// <summary>Selbst gespeicherte Designs (lokal, nur in dieser Datei).</summary>
     public List<DesignEintrag> EigeneDesigns { get; set; } = new();
 
@@ -46,6 +52,15 @@ public sealed class Settings
     public bool BeiVollbildAusblenden { get; set; } = true;
     /// <summary>Abstand vom oberen Rand, wenn die Insel oben in der Mitte ist.</summary>
     public double AbstandOben { get; set; } = 8;
+
+    /// <summary>Wie die Insel aussieht, wenn man nichts macht: "Zu", "Halb" oder "Offen".</summary>
+    public string Ruhezustand { get; set; } = "Zu";
+
+    /// <summary>In die Nähe von oben-Mitte gezogen → sanft dort ankleben.</summary>
+    public bool MagnetOben { get; set; } = true;
+
+    /// <summary>Oben in der Mitte wie eine MacBook-Notch: bündig am Rand, gerade Ecken oben.</summary>
+    public bool NotchLook { get; set; } = true;
 
     // ------------------------------------------------------------------ Position (wird beim Verschieben gespeichert)
 
@@ -91,6 +106,26 @@ public sealed class Settings
 
     /// <summary>true = nur Spotify anzeigen. false = auch YouTube, Browser usw.</summary>
     public bool NurSpotify { get; set; } = true;
+
+    /// <summary>Songtexte anzeigen (holt sie von lrclib.net – nur Titel/Künstler werden gesendet).</summary>
+    public bool Lyrics { get; set; }
+
+    /// <summary>Aktuelle Lyrics-Zeile auch in der zugeklappten Insel.</summary>
+    public bool LyricsKompakt { get; set; }
+
+    /// <summary>Wetter: Ort (z. B. "Basel"). Leer = noch nicht eingerichtet.</summary>
+    public string WetterOrt { get; set; } = "";
+    public double? WetterLat { get; set; }
+    public double? WetterLon { get; set; }
+    /// <summary>Gefundener Name, z. B. "Basel, Schweiz".</summary>
+    public string WetterOrtName { get; set; } = "";
+
+    /// <summary>Eigene Aufgaben mit optionaler Erinnerung.</summary>
+    public List<AufgabeEintrag> Aufgaben { get; set; } = new();
+    public bool AufgabenTon { get; set; } = true;
+
+    /// <summary>Ordner für Apps (Reihenfolge = Anzeige).</summary>
+    public List<string> AppOrdner { get; set; } = new();
 
     /// <summary>Namen von Modulen, die nicht geladen werden sollen, z. B. ["Tasten"].</summary>
     public List<string> DeaktivierteModule { get; set; } = new();
@@ -218,6 +253,20 @@ public sealed class SchnellstartEintrag
 
     /// <summary>Optional: Pfad zu einer .exe/.ico, von der das Symbol genommen wird.</summary>
     public string? Icon { get; set; }
+
+    /// <summary>Name des Ordners, in dem die App liegt (leer = oberste Ebene).</summary>
+    public string? Ordner { get; set; }
+}
+
+public sealed class AufgabeEintrag
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string Text { get; set; } = "";
+    /// <summary>Bis wann (lokale Zeit). null = ohne Erinnerung.</summary>
+    public DateTime? Faellig { get; set; }
+    public bool Erledigt { get; set; }
+    /// <summary>Erinnerung wurde schon gezeigt.</summary>
+    public bool Erinnert { get; set; }
 }
 
 public sealed class TastenEintrag

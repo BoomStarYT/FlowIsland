@@ -12,7 +12,7 @@ using Microsoft.Win32;
 
 namespace Island;
 
-public partial class MainWindow : Window
+public partial class MainWindow : Window, IIslandHost
 {
     private const double CompactHeight = 36;
     private const double CompactRadius = CompactHeight / 2; // genau halbe Höhe = perfekte Pillenform
@@ -25,6 +25,7 @@ public partial class MainWindow : Window
     private const double HandleThickness = 6;    // eingedrückt: Breite des Streifens
     private const double HandlePeek = 12;        // eingedrückt + Maus drüber
     private const double HandleLength = 70;
+    private const double MaxAlertHeight = 118;
 
     private static readonly Brush TuckHitBrush = Ui.Brush("#01000000"); // unsichtbar, aber anklickbar
 
@@ -39,11 +40,15 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _collapseTimer;
     private readonly DispatcherTimer _fullscreenTimer;
     private readonly DispatcherTimer _cacheTimer;
+    private readonly DispatcherTimer _alertTimer = new();
 
     private IIslandModule? _compactModule;
     private IIslandModule? _activeTab;
     private SettingsWindow? _settingsWindow;
     private bool _expanded;
+    private bool _medium;          // halb offen
+    private bool _alertVisible;
+    private double _alertHeight = 90;
     private bool _actionsVisible;
     private bool _hiddenForFullscreen;
     private bool _maybeDrag;
@@ -63,12 +68,13 @@ public partial class MainWindow : Window
     private string Edge => _settings.AmRand ?? "";
     private bool Tucked => _settings.Versteckt && Edge.Length > 0;
     private bool VerticalEdge => Edge is "Links" or "Rechts";
+    private string RestMode => _settings.Ruhezustand ?? "Zu";
 
     public MainWindow(Settings settings)
     {
         InitializeComponent();
         _settings = settings;
-        _context = new IslandContext(settings, Dispatcher, RefreshCompact);
+        _context = new IslandContext(settings, Dispatcher, this);
         Ram = new RamLimiter(settings);
 
         _expandTimer = new DispatcherTimer();
@@ -78,7 +84,15 @@ public partial class MainWindow : Window
         _collapseTimer.Tick += (_, _) =>
         {
             _collapseTimer.Stop();
+            if (_alertVisible) return; // Meldung schliesst sich selbst
             if (!Root.IsMouseOver && Mouse.Captured == null && !(Root.ContextMenu?.IsOpen ?? false)) Collapse();
+        };
+
+        _alertTimer.Tick += (_, _) =>
+        {
+            if (Root.IsMouseOver) return; // erst zu, wenn die Maus weg ist
+            _alertTimer.Stop();
+            HideAlert();
         };
 
         // Alle 1.5 s kurz schauen, ob ein Spiel/Video im Vollbild läuft (kostet praktisch nichts)
@@ -92,6 +106,7 @@ public partial class MainWindow : Window
             _cacheTimer.Stop();
             ExpandedRoot.CacheMode = null;
             CompactHost.CacheMode = null;
+            MediumHost.CacheMode = null;
         };
 
         // Maus-Ereignisse am ganzen Fenster: normal ist nur die Insel "anfassbar",
@@ -107,6 +122,15 @@ public partial class MainWindow : Window
         Root.MouseLeftButtonUp += OnPillMouseUp;
         Root.ContextMenu = BuildMenu();
 
+        // Dateien/Programme auf die Insel ziehen → landen bei den Apps
+        Root.AllowDrop = true;
+        Root.DragOver += (_, e) =>
+        {
+            e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+            e.Handled = true;
+        };
+        Root.Drop += OnFilesDropped;
+
         SourceInitialized += (_, _) =>
         {
             _hwnd = new WindowInteropHelper(this).Handle;
@@ -118,7 +142,9 @@ public partial class MainWindow : Window
             if (Tucked) ShowTucked(animate: false);
             else ApplyPosition();
             UpdateFullscreenTimer();
+            if (RestMode == "Offen") Dispatcher.InvokeAsync(() => Expand(), DispatcherPriority.Background);
         };
+        Theme.CoverChanged += OnCoverChanged;
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
         Closed += OnClosed;
         _settings.Changed += OnSettingsChanged;
@@ -211,7 +237,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Entscheidet, welches Modul in der zugeklappten Insel zu sehen ist.</summary>
-    private void RefreshCompact()
+    public void RefreshCompact()
     {
         IIslandModule? winner = null;
         foreach (var m in _modules)
@@ -229,7 +255,54 @@ public partial class MainWindow : Window
             if (!_expanded && !Tucked) Anim.To(CompactHost, OpacityProperty, 1, 280, Anim.Smooth, from: 0);
         }
 
-        if (!_expanded && !Tucked && !_isDragging) Anim.To(Pill, WidthProperty, CompactPillWidth(), 500, Anim.Spring);
+        // Halb offen: grössere Ansicht vom gleichen Modul
+        var medium = WantMedium();
+        var mediumView = medium ? winner!.MediumView : null;
+        if (medium)
+        {
+            MediumHost.Width = Math.Max(20, winner!.MediumWidth - 22);
+            MediumHost.Height = Math.Max(20, winner.MediumHeight - 12);
+        }
+        if (!ReferenceEquals(MediumHost.Content, mediumView)) MediumHost.Content = mediumView;
+
+        if (!_expanded && !Tucked && !_isDragging)
+        {
+            if (medium != _medium) SwapRestHosts(medium);
+            Anim.To(Pill, WidthProperty, RestWidth(), 500, Anim.Spring);
+            Anim.To(Pill, HeightProperty, RestHeight(), 500, Anim.Spring);
+            ApplyCorners();
+        }
+        else _medium = medium && !Tucked;
+    }
+
+    /// <summary>"Halb offen" nur, wenn eingestellt und das Modul eine halbe Ansicht hat.</summary>
+    private bool WantMedium() => RestMode == "Halb" && _compactModule?.MediumView != null && !Tucked;
+
+    private double RestWidth() => _medium && _compactModule != null ? _compactModule.MediumWidth : CompactPillWidth();
+    private double RestHeight() => _medium && _compactModule != null ? _compactModule.MediumHeight : CompactHeight;
+
+    /// <summary>Zwischen zugeklappt und halb offen überblenden.</summary>
+    private void SwapRestHosts(bool medium)
+    {
+        _medium = medium;
+        BeginTransition();
+        var show = medium ? (FrameworkElement)MediumHost : CompactHost;
+        var hide = medium ? (FrameworkElement)CompactHost : MediumHost;
+        Anim.To(hide, OpacityProperty, 0, 120, null, () => { if (_medium == medium && !_expanded) hide.Visibility = Visibility.Collapsed; });
+        show.Visibility = Visibility.Visible;
+        Anim.To(show, OpacityProperty, 1, 260, Anim.Smooth, delayMs: 80);
+    }
+
+    /// <summary>Tab-Höhe hat sich geändert (z. B. Lyrics an/aus).</summary>
+    public void RefreshLayout()
+    {
+        UpdateWindowSize();
+        if (_expanded && !_actionsVisible && !_alertVisible && _activeTab != null)
+        {
+            BeginTransition();
+            SetContentHeight(ExpandedPillHeight(_activeTab));
+            Anim.To(Pill, HeightProperty, ExpandedPillHeight(_activeTab), 440, Anim.Spring);
+        }
     }
 
     // ================================================================== Auf / Zu
@@ -243,14 +316,15 @@ public partial class MainWindow : Window
         var scale = Math.Max(1, Scale * DeviceScale());
         ExpandedRoot.CacheMode ??= new BitmapCache(scale) { SnapsToDevicePixels = true };
         CompactHost.CacheMode ??= new BitmapCache(scale) { SnapsToDevicePixels = true };
+        MediumHost.CacheMode ??= new BitmapCache(scale) { SnapsToDevicePixels = true };
         _cacheTimer.Stop();
         _cacheTimer.Start();
     }
 
-    private void Expand(bool forActions = false)
+    private void Expand(bool forActions = false, bool forAlert = false)
     {
         if (_expanded || _hiddenForFullscreen || _isDragging || Tucked) return;
-        if (_tabs.Count == 0 && !forActions) return;
+        if (_tabs.Count == 0 && !forActions && !forAlert) return;
 
         IIslandModule? tab = null;
         if (_tabs.Count > 0)
@@ -261,55 +335,149 @@ public partial class MainWindow : Window
         }
 
         _expanded = true;
-        _actionsVisible = forActions || tab == null;
+        _alertVisible = forAlert;
+        _actionsVisible = !forAlert && (forActions || tab == null);
+        var overlay = _actionsVisible || _alertVisible;
         BeginTransition();
         ApplyCorners();
 
-        TabContent.Visibility = _actionsVisible ? Visibility.Hidden : Visibility.Visible;
-        Anim.Set(TabContent, OpacityProperty, _actionsVisible ? 0 : 1);
+        TabContent.Visibility = overlay ? Visibility.Hidden : Visibility.Visible;
+        Anim.Set(TabContent, OpacityProperty, overlay ? 0 : 1);
         Anim.Set(ExpandedHost, OpacityProperty, 1);
         Anim.Set(ExpandedSlide, TranslateTransform.XProperty, 0);
         ActionsPanel.Visibility = _actionsVisible ? Visibility.Visible : Visibility.Collapsed;
         Anim.Set(ActionsPanel, OpacityProperty, _actionsVisible ? 1 : 0);
+        AlertHost.Visibility = _alertVisible ? Visibility.Visible : Visibility.Collapsed;
+        Anim.Set(AlertHost, OpacityProperty, _alertVisible ? 1 : 0);
 
-        var height = _actionsVisible ? ActionsHeight + ExpandedPadding : ExpandedPillHeight(tab!);
+        var height = _alertVisible ? _alertHeight + ExpandedPadding
+                   : _actionsVisible ? ActionsHeight + ExpandedPadding
+                   : ExpandedPillHeight(tab!);
         SetContentHeight(height);
         Anim.To(Pill, WidthProperty, ExpandedWidth, 480, Anim.Spring);
         Anim.To(Pill, HeightProperty, height, 480, Anim.Spring);
 
         Anim.To(CompactHost, OpacityProperty, 0, 90, null, () => { if (_expanded) CompactHost.Visibility = Visibility.Collapsed; });
+        Anim.To(MediumHost, OpacityProperty, 0, 90, null, () => { if (_expanded) MediumHost.Visibility = Visibility.Collapsed; });
         ExpandedRoot.Visibility = Visibility.Visible;
         Anim.To(ExpandedRoot, OpacityProperty, 1, 220, Anim.Smooth, delayMs: 60);
         Anim.To(ExpandedScale, ScaleTransform.ScaleXProperty, 1, 480, Anim.Spring, from: 0.92);
         Anim.To(ExpandedScale, ScaleTransform.ScaleYProperty, 1, 480, Anim.Spring, from: 0.92);
 
-        if (!_actionsVisible) SafeCall(tab, m => m.OnShown());
+        if (!_actionsVisible && !_alertVisible) SafeCall(tab, m => m.OnShown());
     }
 
-    private void Collapse()
+    /// <summary>Zuklappen. Bei "ganz offen" bleibt sie offen (ausser force, z. B. Vollbild).</summary>
+    private void Collapse(bool force = false)
     {
         if (!_expanded) return;
+        if (!force && RestMode == "Offen" && _tabs.Count > 0 && !Tucked)
+        {
+            if (_actionsVisible) HideActions();
+            if (_alertVisible) HideAlert();
+            return;
+        }
         _expanded = false;
-        if (!_actionsVisible) SafeCall(_activeTab, m => m.OnHidden());
+        if (!_actionsVisible && !_alertVisible) SafeCall(_activeTab, m => m.OnHidden());
         _actionsVisible = false;
+        _alertVisible = false;
+        _alertTimer.Stop();
+        _medium = WantMedium();
         BeginTransition();
         ApplyCorners();
 
-        Anim.To(Pill, WidthProperty, CompactPillWidth(), 420, Anim.SpringSoft);
-        Anim.To(Pill, HeightProperty, CompactHeight, 420, Anim.SpringSoft);
+        Anim.To(Pill, WidthProperty, RestWidth(), 420, Anim.SpringSoft);
+        Anim.To(Pill, HeightProperty, RestHeight(), 420, Anim.SpringSoft);
 
         Anim.To(ExpandedRoot, OpacityProperty, 0, 100, null, () =>
         {
             if (_expanded) return;
             ExpandedRoot.Visibility = Visibility.Collapsed;
             ActionsPanel.Visibility = Visibility.Collapsed;
+            AlertHost.Visibility = Visibility.Collapsed;
+            AlertHost.Content = null;
             TabContent.Visibility = Visibility.Visible;
         });
         Anim.To(ExpandedScale, ScaleTransform.ScaleXProperty, 0.94, 200, Anim.Smooth);
         Anim.To(ExpandedScale, ScaleTransform.ScaleYProperty, 0.94, 200, Anim.Smooth);
 
-        CompactHost.Visibility = Visibility.Visible;
-        Anim.To(CompactHost, OpacityProperty, 1, 220, Anim.Smooth, delayMs: 140);
+        var host = _medium ? (FrameworkElement)MediumHost : CompactHost;
+        (_medium ? (FrameworkElement)CompactHost : MediumHost).Visibility = Visibility.Collapsed;
+        host.Visibility = Visibility.Visible;
+        Anim.To(host, OpacityProperty, 1, 220, Anim.Smooth, delayMs: 140);
+    }
+
+    // ================================================================== Meldungen (IIslandHost)
+
+    public void ShowAlert(FrameworkElement view, double height, int seconds)
+    {
+        if (_hiddenForFullscreen || _isDragging) return;
+        if (Tucked) Untuck();
+        _alertHeight = Math.Clamp(height, 40, MaxAlertHeight);
+        AlertHost.Content = view;
+        AlertHost.Height = _alertHeight;
+        _alertTimer.Stop();
+        if (seconds > 0)
+        {
+            _alertTimer.Interval = TimeSpan.FromSeconds(seconds);
+            _alertTimer.Start();
+        }
+
+        if (!_expanded)
+        {
+            Expand(forAlert: true);
+        }
+        else
+        {
+            if (!_actionsVisible && !_alertVisible) SafeCall(_activeTab, m => m.OnHidden());
+            _actionsVisible = false;
+            _alertVisible = true;
+            BeginTransition();
+            SetContentHeight(_alertHeight + ExpandedPadding);
+            TabContent.Visibility = Visibility.Hidden;
+            ActionsPanel.Visibility = Visibility.Collapsed;
+            AlertHost.Visibility = Visibility.Visible;
+            Anim.To(AlertHost, OpacityProperty, 1, 220, Anim.Smooth, delayMs: 60, from: 0);
+            Anim.To(Pill, HeightProperty, _alertHeight + ExpandedPadding, 440, Anim.Spring);
+        }
+        // kleines "Hallo"-Wackeln
+        Anim.To(PillSquash, ScaleTransform.ScaleXProperty, 1, 600, Anim.Spring, from: 1.06);
+    }
+
+    public void HideAlert()
+    {
+        if (!_alertVisible) return;
+        _alertTimer.Stop();
+        var stayOpen = _activeTab != null && (Root.IsMouseOver || RestMode == "Offen");
+        if (!stayOpen)
+        {
+            Collapse(force: true);
+            return;
+        }
+        // Maus ist drüber (oder "ganz offen") → zurück zum Tab
+        _alertVisible = false;
+        BeginTransition();
+        SetContentHeight(ExpandedPillHeight(_activeTab!));
+        Anim.To(AlertHost, OpacityProperty, 0, 100, null, () => { if (!_alertVisible) { AlertHost.Visibility = Visibility.Collapsed; AlertHost.Content = null; } });
+        TabContent.Visibility = Visibility.Visible;
+        Anim.To(TabContent, OpacityProperty, 1, 200, Anim.Smooth, delayMs: 60);
+        Anim.To(Pill, HeightProperty, ExpandedPillHeight(_activeTab!), 440, Anim.Spring);
+        SafeCall(_activeTab, m => m.OnShown());
+    }
+
+    /// <summary>Zweiter Start der App oder "wo ist sie?" → Insel kommt sichtbar zurück.</summary>
+    public void BringBack()
+    {
+        if (_hiddenForFullscreen) { _hiddenForFullscreen = false; Show(); }
+        if (Tucked) Untuck();
+        var device = DeviceScale();
+        if (Native.GetWorkArea((Left + Width / 2) * device, (Top + Height / 2) * device, nearest: false) == null) ResetPosition();
+        Topmost = false;
+        Topmost = true;
+        Anim.To(PillSquash, ScaleTransform.ScaleXProperty, 1, 700, Anim.Spring, from: 1.15);
+        Anim.To(PillSquash, ScaleTransform.ScaleYProperty, 1, 700, Anim.Spring, from: 0.85);
+        if (!_expanded) Expand();
+        if (!Root.IsMouseOver) _collapseTimer.Start();
     }
 
     /// <summary>Zuklappen ohne Animation (z. B. beim Ziehen).</summary>
@@ -318,12 +486,19 @@ public partial class MainWindow : Window
         if (_expanded && !_actionsVisible) SafeCall(_activeTab, m => m.OnHidden());
         _expanded = false;
         _actionsVisible = false;
+        _alertVisible = false;
+        _alertTimer.Stop();
+        _medium = false;
 
         Anim.Set(Pill, WidthProperty, CompactPillWidth());
         Anim.Set(Pill, HeightProperty, CompactHeight);
         Anim.Set(ExpandedRoot, OpacityProperty, 0);
         ExpandedRoot.Visibility = Visibility.Collapsed;
         ActionsPanel.Visibility = Visibility.Collapsed;
+        AlertHost.Visibility = Visibility.Collapsed;
+        AlertHost.Content = null;
+        MediumHost.Visibility = Visibility.Collapsed;
+        Anim.Set(MediumHost, OpacityProperty, 0);
         TabContent.Visibility = Visibility.Visible;
         Anim.Set(TabContent, OpacityProperty, 1);
         CompactHost.Visibility = Visibility.Visible;
@@ -410,7 +585,7 @@ public partial class MainWindow : Window
     private void HideActions()
     {
         if (!_actionsVisible) return;
-        if (_activeTab == null) { Collapse(); return; }
+        if (_activeTab == null) { Collapse(force: true); return; }
 
         _actionsVisible = false;
         BeginTransition();
@@ -451,7 +626,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_expanded && Mouse.Captured == null) _collapseTimer.Start();
+        if (_expanded && Mouse.Captured == null && !_alertVisible) _collapseTimer.Start();
     }
 
     private void OnPillMouseDown(object sender, MouseButtonEventArgs e)
@@ -518,9 +693,17 @@ public partial class MainWindow : Window
         try { DragMove(); }
         catch (InvalidOperationException) { /* Maus schon losgelassen */ }
 
-        _isDragging = false;
         _ignoreHoverUntilLeave = true;
-        Reanchor();
+        if (!Reanchor()) FinishMove();
+    }
+
+    /// <summary>Nach dem Verschieben/Ankleben: wieder in den gewünschten Ruhezustand.</summary>
+    private void FinishMove()
+    {
+        _isDragging = false;
+        if (Tucked) return;
+        RefreshCompact();
+        if (RestMode == "Offen") Expand();
     }
 
     /// <summary>
@@ -531,7 +714,7 @@ public partial class MainWindow : Window
     ///  • sonst: frei schwebend
     /// Die Insel geht immer zur Bildschirmmitte hin auf.
     /// </summary>
-    private void Reanchor()
+    private bool Reanchor()
     {
         var scale = Scale;
         var cw = CompactPillWidth() * scale;
@@ -556,7 +739,26 @@ public partial class MainWindow : Window
         if (pushed.Length > 0 && _settings.AmRandVerstecken)
         {
             Tuck(pushed, x + cw / 2, y + ch / 2, wa);
-            return;
+            return false;
+        }
+
+        // 2a) Magnet wie beim MacBook: in die Nähe von oben-Mitte gezogen → fliegt sanft hin und klebt an
+        var centerX = wa.Left + wa.Width / 2;
+        if (_settings.MagnetOben && (pushed is "" or "Oben")
+            && Math.Abs(x + cw / 2 - centerX) < 150 && y - wa.Top < 90)
+        {
+            var notch = _settings.NotchLook;
+            var tx = centerX - cw / 2;
+            var ty = notch ? wa.Top : wa.Top + Math.Max(0, _settings.AbstandOben);
+            FlyTo(x, y, tx, ty, () =>
+            {
+                PlaceCompact(tx, ty, cw, ch, wa, notch ? "Oben" : "");
+                // "Plopp" beim Ankleben
+                Anim.To(PillSquash, ScaleTransform.ScaleXProperty, 1, 620, Anim.Spring, from: 1.12);
+                Anim.To(PillSquash, ScaleTransform.ScaleYProperty, 1, 620, Anim.Spring, from: 0.78);
+                FinishMove();
+            });
+            return true;
         }
 
         // 2) Im Bildschirm halten
@@ -579,14 +781,37 @@ public partial class MainWindow : Window
             case "Unten": y = wa.Bottom - ch; break;
         }
 
-        // 4) Magnet: oben in der Mitte einrasten (schwebend, wie beim iPhone)
-        if (attached.Length == 0 && Math.Abs(x + cw / 2 - (wa.Left + wa.Width / 2)) < 48 && y - wa.Top < 48)
-        {
-            x = wa.Left + wa.Width / 2 - cw / 2;
-            y = wa.Top + Math.Max(0, _settings.AbstandOben);
-        }
-
         PlaceCompact(x, y, cw, ch, wa, attached);
+        return false;
+    }
+
+    /// <summary>Lässt das (kleine) Zieh-Fenster weich zum Ziel gleiten – mit Federung wie bei macOS.</summary>
+    private void FlyTo(double x, double y, double tx, double ty, Action done)
+    {
+        var startLeft = Left;
+        var startTop = Top;
+        var endLeft = startLeft + (tx - x);
+        var endTop = startTop + (ty - y);
+        var duration = 420 * Anim.Tempo;
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var ease = new SpringEase { Damping = 0.78, Frequency = 1.4 };
+
+        // Beim Fliegen leicht "zusammenfalten"
+        Anim.To(PillSquash, ScaleTransform.ScaleXProperty, 0.9, 200, Anim.Smooth);
+        Anim.To(PillSquash, ScaleTransform.ScaleYProperty, 0.92, 200, Anim.Smooth);
+
+        var timer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(15) };
+        timer.Tick += (_, _) =>
+        {
+            var t = Math.Min(1, watch.Elapsed.TotalMilliseconds / duration);
+            var e = ease.Ease(t);
+            Left = startLeft + (endLeft - startLeft) * e;
+            Top = startTop + (endTop - startTop) * e;
+            if (t < 1) return;
+            timer.Stop();
+            done();
+        };
+        timer.Start();
     }
 
     /// <summary>Setzt die zugeklappte Insel an (x, y) und merkt sich alles für den nächsten Start.</summary>
@@ -691,6 +916,8 @@ public partial class MainWindow : Window
         CompactHost.Visibility = Visibility.Visible;
         Anim.To(CompactHost, OpacityProperty, 1, 260, Anim.Smooth, delayMs: 120, from: 0);
         _ignoreHoverUntilLeave = true;
+        RefreshCompact();
+        if (RestMode == "Offen") Expand();
     }
 
     // ================================================================== Position
@@ -809,7 +1036,10 @@ public partial class MainWindow : Window
     {
         if (PillBg == null) return;
         // Wichtig: nie mehr als die halbe Höhe, sonst macht WPF eine spitze Ellipse statt einer Pille
-        var r = Tucked ? HandlePeek / 2 : _expanded ? Math.Clamp(_settings.Rundung, 8, 40) : CompactRadius;
+        var r = Tucked ? HandlePeek / 2
+              : _expanded ? Math.Clamp(_settings.Rundung, 8, 40)
+              : _medium ? Math.Min(RestHeight() / 2, Math.Clamp(_settings.Rundung + 4, 14, 30))
+              : CompactRadius;
         double tl = r, tr = r, br = r, bl = r;
         switch (Edge)
         {
@@ -843,6 +1073,8 @@ public partial class MainWindow : Window
         UpdateWindowSize();
         ApplyCorners();
         _settings.SaveSoon();
+        RefreshCompact();
+        if (RestMode == "Offen") Expand();
     }
 
     private void UpdateWindowSize()
@@ -857,7 +1089,7 @@ public partial class MainWindow : Window
         }
         else
         {
-            var maxHeight = ActionsHeight + ExpandedPadding;
+            var maxHeight = Math.Max(ActionsHeight, MaxAlertHeight) + ExpandedPadding;
             foreach (var tab in _tabs) maxHeight = Math.Max(maxHeight, ExpandedPillHeight(tab));
 
             // + 7 % Platz fürs Nachfedern der Animation
@@ -896,13 +1128,24 @@ public partial class MainWindow : Window
         RefreshCompact();
         UpdateFullscreenTimer();
         Ram.Apply();
+        if (RestMode == "Offen" && !_expanded && !Tucked && _settingsWindow == null) Expand();
     }
 
-    public void OpenSettings()
+    private void OnCoverChanged()
     {
-        Collapse();
+        if (!_settings.AkzentVomCover && _settings.Stil != Theme.Cover) return;
+        Theme.Apply(_settings, PillBg, PillSheen, PillRim, PillShadow);
+        if (Tucked) ApplyTuckLook(true);
+    }
+
+    public void OpenSettings() => OpenSettings(null);
+
+    public void OpenSettings(string? page)
+    {
+        Collapse(force: true);
         if (_settingsWindow != null)
         {
+            if (page != null) _settingsWindow.GoTo(page);
             _settingsWindow.Activate();
             return;
         }
@@ -913,8 +1156,35 @@ public partial class MainWindow : Window
             _settingsWindow = null;
             Ram.Suspend(false);
         };
+        if (page != null) _settingsWindow.GoTo(page);
         _settingsWindow.Show();
         _settingsWindow.Activate();
+    }
+
+    // ================================================================== Dateien auf die Insel ziehen
+
+    private void OnFilesDropped(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetData(DataFormats.FileDrop) is not string[] files) return;
+        var added = 0;
+        foreach (var path in files)
+        {
+            if (_settings.Schnellstart.Any(x => string.Equals(x.Ziel, path, StringComparison.OrdinalIgnoreCase))) continue;
+            var name = System.IO.Directory.Exists(path) ? System.IO.Path.GetFileName(path.TrimEnd('\\')) : System.IO.Path.GetFileNameWithoutExtension(path);
+            _settings.Schnellstart.Add(new SchnellstartEintrag { Name = string.IsNullOrWhiteSpace(name) ? path : name, Ziel = path });
+            added++;
+        }
+        e.Handled = true;
+        if (added == 0) return;
+        _settings.NotifyChanged();
+
+        var text = new TextBlock
+        {
+            Text = added == 1 ? "\u2713  Zu deinen Apps hinzugefügt" : $"\u2713  {added} Apps hinzugefügt",
+            FontSize = 14, FontWeight = FontWeights.SemiBold,
+            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+        };
+        ShowAlert(text, 44, 3);
     }
 
     private ContextMenu BuildMenu()
@@ -978,13 +1248,14 @@ public partial class MainWindow : Window
         if (fullscreen && !_hiddenForFullscreen)
         {
             _hiddenForFullscreen = true;
-            Collapse();
+            Collapse(force: true);
             Hide();
         }
         else if (!fullscreen && _hiddenForFullscreen)
         {
             _hiddenForFullscreen = false;
             Show();
+            if (RestMode == "Offen") Expand();
         }
     }
 
@@ -1004,6 +1275,8 @@ public partial class MainWindow : Window
         _collapseTimer.Stop();
         _fullscreenTimer.Stop();
         _cacheTimer.Stop();
+        _alertTimer.Stop();
+        Theme.CoverChanged -= OnCoverChanged;
         _settings.Changed -= OnSettingsChanged;
         _settings.Save();
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;

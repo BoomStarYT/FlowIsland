@@ -2,6 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 
 namespace Island.Core;
@@ -13,6 +14,26 @@ public static class Theme
     public const string Gradient = "Verlauf";
     public const string Glass = "Liquid Glass";
     public const string PureGlass = "Klarglas";
+    public const string Cover = "Cover";
+
+    /// <summary>Kräftige Farbe aus dem Cover des laufenden Songs (null = kein Cover).</summary>
+    public static Color? CoverColor { get; private set; }
+
+    /// <summary>Wird ausgelöst, wenn ein neues Cover eine andere Farbe hat.</summary>
+    public static event Action? CoverChanged;
+
+    /// <summary>Aktueller Hintergrund der Insel (für Fenster im gleichen Look, z. B. Aufgaben).</summary>
+    public static Brush CurrentFill { get; private set; } = new SolidColorBrush(Color.FromRgb(11, 11, 12));
+    public static Brush CurrentRim { get; private set; } = Brushes.Transparent;
+    public static bool CurrentIsLight { get; private set; }
+
+    public static void SetCoverColor(Color? color)
+    {
+        if (CoverColor == color) return;
+        CoverColor = color;
+        try { CoverChanged?.Invoke(); }
+        catch (Exception ex) { App.Log(ex); }
+    }
 
     public static void Apply(Settings s, Border background, Border sheen, Border rim, UIElement shadow)
     {
@@ -75,22 +96,52 @@ public static class Theme
             rimThickness = 1.2;
             reference = c1;
         }
+        else if (style == Cover)
+        {
+            // Dunkel und edel, mit einem Hauch der Cover-Farbe
+            var tint = CoverColor ?? ParseColor(s.Akzent, Color.FromRgb(48, 209, 88));
+            var dark = Color.FromRgb(12, 12, 15);
+            var a = (byte)(255 * opacity);
+            fill = Freeze(Linear(120,
+                (WithAlpha(Blend(dark, tint, 0.26), a), 0),
+                (WithAlpha(Blend(dark, tint, 0.10), a), 0.55),
+                (WithAlpha(dark, a), 1)));
+            sheenBrush = Freeze(Layers(
+                Radial(new Point(0.12, 0.0), 0.9, 1.6, (WithAlpha(tint, 70), 0), (WithAlpha(tint, 0), 1)),
+                Linear(90, (WithAlpha(Colors.White, 26), 0), (WithAlpha(Colors.White, 0), 0.45))));
+            rimBrush = Freeze(Linear(100,
+                (WithAlpha(Blend(Colors.White, tint, 0.4), 90), 0),
+                (WithAlpha(Colors.White, 14), 0.5),
+                (WithAlpha(tint, 50), 1)));
+            rimThickness = 1.1;
+            reference = dark;
+        }
         else if (style == Gradient)
         {
+            // Drei Stufen + weicher Lichtschein → wirkt tiefer als ein einfacher Verlauf
             var a = (byte)(255 * opacity);
-            fill = Freeze(Linear(s.VerlaufWinkel, (WithAlpha(c1, a), 0), (WithAlpha(c2, a), 1)));
-            sheenBrush = Freeze(Linear(90, (WithAlpha(Colors.White, 34), 0), (WithAlpha(Colors.White, 0), 0.5)));
-            rimBrush = Freeze(Linear(90, (WithAlpha(Colors.White, 60), 0), (WithAlpha(Colors.White, 14), 1)));
-            reference = Mix(c1, c2);
+            var middle = Saturate(Blend(c1, c2, 0.5), 0.12);
+            fill = Freeze(Linear(s.VerlaufWinkel, (WithAlpha(c1, a), 0), (WithAlpha(middle, a), 0.52), (WithAlpha(c2, a), 1)));
+            sheenBrush = Freeze(Layers(
+                Radial(new Point(0.9, 0.0), 0.8, 1.5, (WithAlpha(Lighten(c2, 0.35), 64), 0), (WithAlpha(c2, 0), 1)),
+                Linear(90, (WithAlpha(Colors.White, 40), 0), (WithAlpha(Colors.White, 6), 0.4), (WithAlpha(Colors.White, 0), 0.6))));
+            rimBrush = Freeze(Linear(90, (WithAlpha(Colors.White, 80), 0), (WithAlpha(Colors.White, 18), 0.5), (WithAlpha(Colors.White, 34), 1)));
+            rimThickness = 1.1;
+            reference = Blend(c1, c2, 0.5);
         }
         else
         {
-            fill = Freeze(new SolidColorBrush(WithAlpha(c1, (byte)(255 * opacity))));
-            sheenBrush = Freeze(Linear(90, (WithAlpha(Colors.White, 14), 0), (WithAlpha(Colors.White, 0), 0.45)));
-            rimBrush = Freeze(Linear(90, (WithAlpha(Colors.White, 40), 0), (WithAlpha(Colors.White, 10), 1)));
+            // Einfarbig: ganz leichte Wölbung (oben heller) + feine Lichtkante
+            var a = (byte)(255 * opacity);
+            fill = Freeze(Linear(90, (WithAlpha(Lighten(c1, 0.07), a), 0), (WithAlpha(c1, a), 0.55), (WithAlpha(Darken(c1, 0.06), a), 1)));
+            sheenBrush = Freeze(Linear(90, (WithAlpha(Colors.White, 22), 0), (WithAlpha(Colors.White, 4), 0.35), (WithAlpha(Colors.White, 0), 0.5)));
+            rimBrush = Freeze(Linear(90, (WithAlpha(Colors.White, 64), 0), (WithAlpha(Colors.White, 14), 0.45), (WithAlpha(Colors.White, 22), 1)));
             reference = c1;
         }
 
+        CurrentFill = fill;
+        CurrentRim = rimBrush;
+        CurrentIsLight = IsLight(reference);
         background.Background = fill;
         sheen.Background = sheenBrush;
         rim.BorderBrush = rimBrush;
@@ -101,7 +152,15 @@ public static class Theme
         shadow.Visibility = s.Schatten ? Visibility.Visible : Visibility.Collapsed;
         shadow.Opacity = style == Glass ? 0.6 : style == PureGlass ? 0.45 : 1.0;
 
-        ApplyTextColors(IsLight(reference), ParseColor(s.Akzent, Color.FromRgb(48, 209, 88)));
+        ApplyTextColors(IsLight(reference), AccentFor(s));
+    }
+
+    /// <summary>Akzent aus den Einstellungen – oder vom Cover, wenn so eingestellt.</summary>
+    public static Color AccentFor(Settings s)
+    {
+        var own = ParseColor(s.Akzent, Color.FromRgb(48, 209, 88));
+        if ((s.AkzentVomCover || s.Stil == Cover) && CoverColor is Color c) return c;
+        return own;
     }
 
     /// <summary>Helle Insel → dunkle Schrift, dunkle Insel → helle Schrift.</summary>
@@ -116,7 +175,14 @@ public static class Theme
         res["IslandTrack"] = SolidBrush(baseColor, light ? (byte)38 : (byte)51);
         res["IslandPlaceholder"] = SolidBrush(baseColor, light ? (byte)26 : (byte)38);
         res["IslandChip"] = SolidBrush(baseColor, light ? (byte)22 : (byte)38);
-        res["IslandAccent"] = SolidBrush(accent, 255);
+        // Akzent wechselt sanft (z. B. beim nächsten Song mit anderer Cover-Farbe)
+        if (res["IslandAccent"] is SolidColorBrush current && !current.IsFrozen)
+        {
+            if (current.Color != accent)
+                current.BeginAnimation(SolidColorBrush.ColorProperty,
+                    new ColorAnimation(accent, TimeSpan.FromMilliseconds(650)) { EasingFunction = Anim.Smooth });
+        }
+        else res["IslandAccent"] = new SolidColorBrush(accent);
     }
 
     // ------------------------------------------------------------------ Farb-Helfer
@@ -209,6 +275,51 @@ public static class Theme
         (byte)(c.R + (255 - c.R) * amount),
         (byte)(c.G + (255 - c.G) * amount),
         (byte)(c.B + (255 - c.B) * amount));
+
+    private static Color Darken(Color c, double amount) => Color.FromRgb(
+        (byte)(c.R * (1 - amount)), (byte)(c.G * (1 - amount)), (byte)(c.B * (1 - amount)));
+
+    /// <summary>a → b, t = 0..1</summary>
+    public static Color Blend(Color a, Color b, double t) => Color.FromRgb(
+        (byte)Math.Round(a.R + (b.R - a.R) * t), (byte)Math.Round(a.G + (b.G - a.G) * t), (byte)Math.Round(a.B + (b.B - a.B) * t));
+
+    private static Color Saturate(Color c, double amount)
+    {
+        var (h, sat, l) = ToHsl(c);
+        return FromHsl(h, Math.Clamp(sat + amount, 0, 1), l);
+    }
+
+    public static (double H, double S, double L) ToHsl(Color c)
+    {
+        double r = c.R / 255.0, g = c.G / 255.0, b = c.B / 255.0;
+        var max = Math.Max(r, Math.Max(g, b));
+        var min = Math.Min(r, Math.Min(g, b));
+        var l = (max + min) / 2;
+        if (max - min < 1e-6) return (0, 0, l);
+        var d = max - min;
+        var sat = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        double h;
+        if (max == r) h = (g - b) / d + (g < b ? 6 : 0);
+        else if (max == g) h = (b - r) / d + 2;
+        else h = (r - g) / d + 4;
+        return (h * 60, sat, l);
+    }
+
+    private static RadialGradientBrush Radial(Point center, double rx, double ry, params (Color Color, double Offset)[] stops)
+    {
+        var brush = new RadialGradientBrush { Center = center, GradientOrigin = center, RadiusX = rx, RadiusY = ry };
+        foreach (var (color, offset) in stops) brush.GradientStops.Add(new GradientStop(color, offset));
+        return brush;
+    }
+
+    /// <summary>Mehrere Pinsel übereinander (z. B. Lichtschein + Glanz).</summary>
+    private static DrawingBrush Layers(params Brush[] layers)
+    {
+        var group = new DrawingGroup();
+        var rect = new RectangleGeometry(new Rect(0, 0, 1, 1));
+        foreach (var layer in layers) group.Children.Add(new GeometryDrawing(layer, null, rect));
+        return new DrawingBrush(group) { Stretch = Stretch.Fill };
+    }
 
     private static Color Mix(Color a, Color b) => Color.FromRgb(
         (byte)((a.R + b.R) / 2), (byte)((a.G + b.G) / 2), (byte)((a.B + b.B) / 2));

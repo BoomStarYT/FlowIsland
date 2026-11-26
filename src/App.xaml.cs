@@ -11,6 +11,8 @@ namespace Island;
 public partial class App : Application
 {
     private static Mutex? _mutex;
+    private static EventWaitHandle? _showSignal;
+    private const string ShowSignalName = @"Local\DynamicIsland_Zeigen";
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -18,6 +20,16 @@ public partial class App : Application
         _mutex = new Mutex(true, @"Local\DynamicIsland_EinzigeInstanz", out bool isFirst);
         if (!isFirst)
         {
+            // Läuft schon (vielleicht versteckt am Rand) → der laufenden Insel sagen: "zeig dich!"
+            try
+            {
+                if (EventWaitHandle.TryOpenExisting(ShowSignalName, out var signal))
+                {
+                    signal.Set();
+                    signal.Dispose();
+                }
+            }
+            catch { /* egal */ }
             _mutex.Dispose();
             _mutex = null;
             Shutdown();
@@ -31,7 +43,17 @@ public partial class App : Application
         base.OnStartup(e);
 
         var settings = Settings.Load();
-        new MainWindow(settings).Show();
+        var window = new MainWindow(settings);
+        window.Show();
+
+        // Auf "zeig dich!" von einem zweiten Start hören (kostet nichts, wartet nur)
+        try
+        {
+            _showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, ShowSignalName);
+            ThreadPool.RegisterWaitForSingleObject(_showSignal, (_, _) =>
+                Current?.Dispatcher.InvokeAsync(() => window.BringBack()), null, Timeout.Infinite, executeOnlyOnce: false);
+        }
+        catch (Exception ex) { Log(ex); }
     }
 
     protected override void OnExit(ExitEventArgs e)

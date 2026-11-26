@@ -291,6 +291,14 @@ public sealed class SettingsWindow : Window
 
     private void RebuildPage() => ShowPage(_currentPage, keepScroll: true);
 
+    /// <summary>Von aussen direkt zu einer Seite springen (z. B. "Apps", "Aufgaben").</summary>
+    public void GoTo(string page)
+    {
+        foreach (var child in _nav.Children)
+            if (child is RadioButton r && Equals(r.Tag, page)) { r.IsChecked = true; return; }
+        ShowPage(page);
+    }
+
     // ================================================================== Scrollen
 
     private void OnScrollWheel(object sender, MouseWheelEventArgs e)

@@ -20,7 +20,12 @@
               VerticalAlignment="Top"
               Margin="18"
               Width="150" Height="36"
+              RenderTransformOrigin="0.5,0"
               TextElement.Foreground="{DynamicResource IslandText}">
+            <!-- Kleines "Plopp" beim Ankleben oben in der Mitte -->
+            <Grid.RenderTransform>
+                <ScaleTransform x:Name="PillSquash" ScaleX="1" ScaleY="1"/>
+            </Grid.RenderTransform>
             <Grid.LayoutTransform>
                 <ScaleTransform x:Name="PillScale" ScaleX="1" ScaleY="1"/>
             </Grid.LayoutTransform>
@@ -43,6 +48,14 @@
                 <!-- Zugeklappt -->
                 <ContentControl x:Name="CompactHost"
                                 Margin="6,0,12,0"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Focusable="False"/>
+
+                <!-- Halb offen -->
+                <ContentControl x:Name="MediumHost"
+                                Visibility="Collapsed" Opacity="0"
+                                Margin="12,0,10,0"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
                                 Focusable="False"/>
@@ -74,6 +87,10 @@
                                     HorizontalAlignment="Center"
                                     Margin="0,8,0,0"/>
                     </Grid>
+
+                    <!-- Meldung (z. B. Aufgabe fällig) -->
+                    <ContentControl x:Name="AlertHost" Visibility="Collapsed" Opacity="0" Focusable="False"
+                                    VerticalAlignment="Center"/>
 
                     <!-- Doppelklick-Menü -->
                     <StackPanel x:Name="ActionsPanel"
