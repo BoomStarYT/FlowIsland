@@ -519,7 +519,15 @@ public sealed class SettingsWindow : Window
             Row("Schatten", null, Toggle(_s.Schatten, v => { _s.Schatten = v; _s.NotifyChanged(); }))));
 
         p.Children.Add(SectionTitle("Fortschrittsbalken"));
-        p.Children.Add(Card(BuildProgressGallery()));
+        var ownColor = Theme.TryParseColor(_s.FortschrittFarbe, out _);
+        p.Children.Add(Card(
+            BuildProgressGallery(),
+            Row("Eigene Balkenfarbe", "Aus = gleiche Farbe wie der Akzent", Toggle(ownColor, v =>
+            {
+                _s.FortschrittFarbe = v ? _s.Akzent : "";
+                _s.NotifyChanged();
+                RebuildPage();
+            }), ownColor ? ColorPicker(_s.FortschrittFarbe, v => { _s.FortschrittFarbe = v; _s.NotifyChanged(); }) : null, glyph: "\uE790")));
 
         p.Children.Add(SectionTitle("Schrift"));
         p.Children.Add(Card(Row("Schriftart", "Gilt für alle Texte der Insel", null, below: FontPicker(), glyph: "\uE8D2")));

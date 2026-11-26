@@ -153,6 +153,10 @@ public static class Theme
         shadow.Opacity = style == Glass ? 0.6 : style == PureGlass ? 0.45 : 1.0;
 
         ApplyTextColors(IsLight(reference), AccentFor(s));
+
+        // Fortschrittsbalken: eigene Farbe oder einfach die Akzentfarbe
+        var res = Application.Current.Resources;
+        res["IslandProgress"] = TryParseColor(s.FortschrittFarbe, out var progress) ? Freeze(new SolidColorBrush(progress)) : res["IslandAccent"];
     }
 
     /// <summary>Akzent aus den Einstellungen – oder vom Cover, wenn so eingestellt.</summary>

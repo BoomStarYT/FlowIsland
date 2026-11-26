@@ -33,6 +33,17 @@ Zugeklappt siehst du sofort, ob Musik läuft:
 
 Nahe am Rand geht die Insel automatisch zur Bildschirmmitte hin auf (z. B. unten → nach oben).
 
+## Neu in 1.6
+
+- **Fortschrittsbalken-Designs:** Google-Welle (Standard), Linie, Pixel-Tiere (Katze, Hund, Hase, Ente, Schildkröte, Schnecke), Pixel Art, Programmierer, Arbeit, Freizeit, Natur, Wissenschaft – auch mit eigener Farbe
+- **Quelle wechseln:** In der offenen Insel oben rechts auf „•••“ → Spotify, Browser/Webplayer usw.
+- **Lyrics** (optional, von lrclib.net) – unter dem Song oder in der zugeklappten Insel
+- **Ruhezustand:** zugeklappt, halb offen oder ganz offen
+- **MacBook-Notch:** in die Nähe von oben-Mitte ziehen → fliegt hin und klebt an
+- **Stil „Cover“** und **Akzent vom Song-Cover**
+- **Apps-Ordner** erstellen, benennen, sortieren; Dateien einfach auf die Insel ziehen
+- **Aufgaben** mit Erinnerung, **Wetter** (open-meteo.com), **Kontrollzentrum** (Lautstärke, Helligkeit, WLAN, Bluetooth, Flugmodus, Kamera …)
+
 ## Einstellungen (Doppelklick → Einstellungen)
 
 - **Aussehen:** Vorlagen, **Meine Designs** (eigene Designs mit Namen speichern, anwenden, löschen – nur lokal), Stil (Einfarbig / Verlauf / Liquid Glass / **Klarglas** mit Regler Wolkig ↔ Klar), Farben, Verlaufs-Winkel, Deckkraft, Akzentfarbe, Grösse, Rundung, Schatten, Schriftart

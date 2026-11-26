@@ -19,17 +19,20 @@
 
 | | |
 |---|---|
-| 🎵 **Now Playing** | Song title, artist and album art from Spotify (or any media app). Play/pause, previous/next and a seekable progress bar. |
+| 🎵 **Now Playing** | Song title, artist and album art from Spotify, your browser or any media app. Switch sources with the **•••** button. Play/pause, previous/next and a seekable progress bar. |
+| 🎤 **Live lyrics** *(optional)* | Time-synced lyrics under the song – or right inside the collapsed island. |
+| 〰️ **Progress bar styles** | Google-style wiggly line (default), plus 30 designs: cute pixel animals, pixel art, coder, work, leisure, nature and science themes – in any color. |
 | 🎚️ **Clear playback state** | Animated equalizer while music plays – flat and dimmed when paused. |
-| 🧩 **Tabs** | Music, Apps (quick-launch tiles for programs, folders and links) and a keyboard-shortcut cheat sheet. |
-| 🕒 **Idle widgets** | When nothing is playing: date & time, clock, battery, CPU/RAM usage or a minimal dot. Switch with the mouse wheel. |
-| 🖱️ **Move it anywhere** | Drag the island wherever you like. It snaps to the top center and docks flush against screen edges. |
+| 🧩 **Widgets** | Music, Apps with your own **folders**, **Tasks** with reminders, **Weather** with a short forecast, a mini **Control Center** (volume, brightness, Wi-Fi, Bluetooth, airplane mode, camera …) and a shortcut cheat sheet. |
+| 🕒 **Idle widgets** | When nothing is playing: date & time, clock, weather, battery, CPU/RAM usage or a minimal dot. Switch with the mouse wheel. |
+| 🪟 **Collapsed, half or fully open** | Choose how the island looks when you are not using it – compact pill, a bigger “live activity”, or always open. |
+| 🖱️ **Move it anywhere** | Drag the island wherever you like. Drop it near the top center and it glides there and sticks like a MacBook notch. Docks flush against screen edges. |
 | 📥 **Tuck into the edge** | Push it fully into an edge and it shrinks to a slim glowing handle. Click or drag it out to bring it back. |
-| 🎨 **Fully customizable** | Solid, gradient, tinted *Liquid Glass* or colorless *Clear Glass* with a frosted ↔ clear slider. 16 curated presets, random palettes, custom fonts, size and corner radius. |
+| 🎨 **Fully customizable** | Solid, gradient, tinted *Liquid Glass* or colorless *Clear Glass* with a frosted ↔ clear slider. *Cover* style that takes its colors from the current album art. 20+ curated presets, random palettes, custom fonts, size and corner radius. |
 | 💾 **Your own themes** | Save your current look under a name and switch back with one click. Stored locally on your PC. |
 | ⌨️ **Easy shortcuts** | Pick apps from your Start menu with search and icons, drag & drop files and folders, tap popular Windows shortcuts or record your own key combo. |
 | ⚡ **Built for efficiency** | Event-driven (no constant polling), GPU-accelerated animations, optional RAM limiter, auto-hides during fullscreen games and videos. |
-| 🔒 **Private by design** | No account, no login, no internet connection, no telemetry. Everything stays on your PC. |
+| 🔒 **Private by design** | No account, no login, no telemetry. Everything stays on your PC. Only the optional extras go online: lyrics (sends song title/artist to lrclib.net) and weather (sends your city to open-meteo.com). |
 
 ---
 

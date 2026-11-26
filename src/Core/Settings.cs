@@ -38,6 +38,9 @@ public sealed class Settings
     /// <summary>Aussehen des Fortschrittsbalkens, z. B. "Welle", "Linie", "Katze", "DNA" (siehe ProgressStyles).</summary>
     public string Fortschritt { get; set; } = "Welle";
 
+    /// <summary>Eigene Farbe für den Fortschrittsbalken ("" = Akzentfarbe).</summary>
+    public string FortschrittFarbe { get; set; } = "";
+
     /// <summary>Selbst gespeicherte Designs (lokal, nur in dieser Datei).</summary>
     public List<DesignEintrag> EigeneDesigns { get; set; } = new();
 

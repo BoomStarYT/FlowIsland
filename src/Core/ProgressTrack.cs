@@ -144,7 +144,7 @@ public sealed class ProgressTrack : FrameworkElement
         _amp += (target - _amp) * Math.Min(1, dt * 7);
         if (!_live) _amp = target;
 
-        _accent = (TryFindResource("IslandAccent") as Brush) ?? Brushes.LimeGreen;
+        _accent = (TryFindResource("IslandProgress") as Brush) ?? (TryFindResource("IslandAccent") as Brush) ?? Brushes.LimeGreen;
         _track = (TryFindResource("IslandTrack") as Brush) ?? Brushes.Gray;
         _text = (TryFindResource("IslandText") as Brush) ?? Brushes.White;
         _sub = (TryFindResource("IslandSubText") as Brush) ?? Brushes.Gray;
