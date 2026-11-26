@@ -37,6 +37,7 @@ public sealed class SettingsWindow : Window
     private static readonly DesignEintrag[] Presets =
     {
         P("Mitternacht", Theme.Solid, "#0A0A0C", "#0A0A0C", "#30D158"),
+        P("Cover-Farben", Theme.Cover, "#0C0C0F", "#0C0C0F", "#FF375F"),
         P("Klarglas", Theme.PureGlass, "#FFFFFF", "#FFFFFF", "#FFFFFF", klarheit: 0.75),
         P("Milchglas", Theme.PureGlass, "#FFFFFF", "#FFFFFF", "#0A84FF", klarheit: 0.15),
         P("Liquid Glass", Theme.Glass, "#16161D", "#16161D", "#64D2FF", 0.5),
@@ -52,11 +53,20 @@ public sealed class SettingsWindow : Window
         P("Ozean", Theme.Gradient, "#2E3192", "#1BFFFF", "#FFFFFF"),
         P("Xiaomi", Theme.Gradient, "#FF6900", "#FF3D00", "#FFFFFF"),
         P("Espresso", Theme.Gradient, "#3E2723", "#8D6E63", "#FFCC80"),
+        P("Mitternachtsblau", Theme.Gradient, "#0B132B", "#1C2541", "#6FFFE9"),
+        P("Pflaume", Theme.Gradient, "#2D0B3A", "#7B2869", "#FFB3C6"),
+        P("Wald", Theme.Gradient, "#0B1D13", "#1F4D36", "#B7E4C7"),
+        P("Champagner", Theme.Gradient, "#F7E7CE", "#E6C79C", "#8A5A2B"),
+        P("Neon", Theme.Gradient, "#120458", "#7A04EB", "#FE75FE"),
+        P("Eisblau", Theme.Glass, "#BFE3FF", "#BFE3FF", "#0A84FF", 0.55),
     };
 
     private static readonly Dictionary<string, string> ModuleDescriptions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["Musik"] = "Song, Cover, Fortschritt und Steuerung",
+        ["Musik"] = "Song, Cover, Fortschritt, Lyrics und Steuerung",
+        ["Aufgaben"] = "To-dos mit Erinnerung – die Insel meldet sich, wenn etwas fällig ist",
+        ["Wetter"] = "Wetter von heute mit kleiner Vorschau",
+        ["Kontrollzentrum"] = "Lautstärke, Helligkeit, WLAN, Bluetooth, Kamera …",
         ["Apps"] = "Schnellstart-Kacheln für Apps und Ordner",
         ["Tasten"] = "Spickzettel für Tastenkürzel",
         ["Ruheanzeige"] = "Datum, Uhr, Akku oder Leistung, wenn keine Musik läuft",
@@ -148,6 +158,7 @@ public sealed class SettingsWindow : Window
         AddNav("Funktionen", "");
         AddNav("Verbindungen", "");
         AddNav("Apps", "");
+        AddNav("Aufgaben", "");
         AddNav("Tastenkürzel", "");
         AddNav("Info", "");
         sideStack.Children.Add(_nav);
@@ -194,7 +205,12 @@ public sealed class SettingsWindow : Window
         }.Themed(Border.BackgroundProperty, "S.Bg");
 
         KeyDown += (_, e) => { if (e.Key == Key.Escape) Close(); };
-        Closing += (_, _) => { StopScrollAnimation(); _s.Save(); };
+        Closing += (_, _) =>
+        {
+            StopScrollAnimation();
+            if (_tasksListener != null) _s.Changed -= _tasksListener;
+            _s.Save();
+        };
 
         // Mausrad: langsamer und weich gleitend
         _scroll.PreviewMouseWheel += OnScrollWheel;
@@ -263,6 +279,7 @@ public sealed class SettingsWindow : Window
                 case "Funktionen": BuildFeatures(panel); break;
                 case "Verbindungen": BuildConnections(panel); break;
                 case "Apps": BuildApps(panel); break;
+                case "Aufgaben": BuildTasks(panel); break;
                 case "Tastenkürzel": BuildKeys(panel); break;
                 default: BuildInfo(panel); break;
             }
@@ -447,7 +464,7 @@ public sealed class SettingsWindow : Window
         p.Children.Add(SectionTitle("Stil"));
         var style = new List<UIElement>
         {
-            Row("Design", null, null, below: Segmented(new[] { Theme.Solid, Theme.Gradient, Theme.Glass, Theme.PureGlass }, _s.Stil, v =>
+            Row("Design", null, null, below: Segmented(new[] { Theme.Solid, Theme.Gradient, Theme.Glass, Theme.PureGlass, Theme.Cover }, _s.Stil, v =>
             {
                 _s.Stil = v;
                 _s.NotifyChanged();
@@ -455,7 +472,14 @@ public sealed class SettingsWindow : Window
             }), glyph: "\uE790"),
         };
 
-        if (_s.Stil == Theme.PureGlass)
+        if (_s.Stil == Theme.Cover)
+        {
+            style.Add(Info("Dunkel und edel – Akzentfarbe und ein leichter Farbschimmer kommen automatisch vom Cover des Songs, der gerade läuft. " +
+                           "Ohne Musik gilt deine eigene Akzentfarbe unten."));
+            style.Add(Row("Deckkraft", null,
+                SliderControl(30, 100, _s.Deckkraft * 100, v => $"{v:0} %", v => { _s.Deckkraft = v / 100; _s.NotifyChanged(); }, 5)));
+        }
+        else if (_s.Stil == Theme.PureGlass)
         {
             style.Add(Info("Reines Glas ohne Farbe – wie bei Apple. Links milchig und wolkig, rechts ganz klar. " +
                            "Hinweis: Echte Unschärfe (Blur) hinter der Insel ist in Windows mit flüssigen Animationen nicht sauber machbar."));
@@ -486,20 +510,99 @@ public sealed class SettingsWindow : Window
         p.Children.Add(Card(
             Row("Akzentfarbe", "Equalizer und Fortschrittsbalken", null,
                 below: ColorPicker(_s.Akzent, v => { _s.Akzent = v; _s.NotifyChanged(); })),
+            Row("Akzent vom Song-Cover", "Nimmt automatisch die schönste Farbe aus dem Cover, das gerade läuft",
+                Toggle(_s.AkzentVomCover, v => { _s.AkzentVomCover = v; _s.NotifyChanged(); }), glyph: "\uE790"),
             Row("Grösse", null, SliderControl(80, 130, _s.Groesse * 100, v => $"{v:0} %",
                 v => { _s.Groesse = v / 100; _s.NotifyChanged(); }, 5)),
             Row("Rundung", "Ecken, wenn aufgeklappt", SliderControl(10, 36, _s.Rundung, v => $"{v:0}",
                 v => { _s.Rundung = v; _s.NotifyChanged(); }, 1)),
             Row("Schatten", null, Toggle(_s.Schatten, v => { _s.Schatten = v; _s.NotifyChanged(); }))));
 
+        p.Children.Add(SectionTitle("Fortschrittsbalken"));
+        p.Children.Add(Card(BuildProgressGallery()));
+
         p.Children.Add(SectionTitle("Schrift"));
         p.Children.Add(Card(Row("Schriftart", "Gilt für alle Texte der Insel", null, below: FontPicker(), glyph: "\uE8D2")));
+    }
+
+    /// <summary>Alle Balken-Designs als lebendige Vorschau zum Antippen.</summary>
+    private FrameworkElement BuildProgressGallery()
+    {
+        var root = new StackPanel { Margin = new Thickness(14, 10, 10, 8) };
+        var start = DateTime.Now;
+        foreach (var (category, items) in ProgressTrack.Catalog)
+        {
+            root.Children.Add(new TextBlock { Text = category, FontSize = 12, FontWeight = FontWeights.SemiBold, Margin = new Thickness(2, 6, 0, 6) }
+                .Themed(TextBlock.ForegroundProperty, "S.Sub"));
+            var wrap = new WrapPanel();
+            foreach (var (id, name) in items)
+            {
+                var styleId = id;
+                var selected = _s.Fortschritt == id;
+                var track = new ProgressTrack
+                {
+                    StyleId = id, Height = 22, Live = true, Playing = true,
+                    Source = () => 0.15 + 0.7 * ((DateTime.Now - start).TotalSeconds / 14 % 1),
+                };
+                var preview = new Border
+                {
+                    Width = 148, Height = 40, CornerRadius = new CornerRadius(12), Padding = new Thickness(12, 0, 12, 0),
+                    Background = Theme.CurrentFill, Child = track,
+                    BorderThickness = new Thickness(selected ? 2 : 1),
+                };
+                if (selected) preview.SetResourceReference(Border.BorderBrushProperty, "S.Accent");
+                else preview.BorderBrush = Ui.Brush("#33FFFFFF");
+
+                var label = new TextBlock { Text = name, FontSize = 11.5, Margin = new Thickness(0, 5, 0, 0), HorizontalAlignment = HorizontalAlignment.Center };
+                if (selected) label.FontWeight = FontWeights.SemiBold;
+                else label.Themed(TextBlock.ForegroundProperty, "S.Sub");
+
+                var stack = new StackPanel();
+                stack.Children.Add(preview);
+                stack.Children.Add(label);
+                var button = new Button { Content = stack, Margin = new Thickness(0, 0, 8, 10), ToolTip = name }.Themed(StyleProperty, "Plain");
+                button.Click += (_, _) =>
+                {
+                    _s.Fortschritt = styleId;
+                    _s.NotifyChanged();
+                    RebuildPage();
+                };
+                wrap.Children.Add(button);
+            }
+            root.Children.Add(wrap);
+        }
+        // Vorschauen anhalten, wenn das Fenster zu ist
+        root.Unloaded += (_, _) =>
+        {
+            foreach (var t in FindAll<ProgressTrack>(root)) t.Live = false;
+        };
+        return root;
+    }
+
+    private static IEnumerable<T> FindAll<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T t) yield return t;
+            foreach (var x in FindAll<T>(child)) yield return x;
+        }
     }
 
     private void BuildBehavior(StackPanel p)
     {
         p.Children.Add(Header("Verhalten"));
         p.Children.Add(Sub("Wie die Insel aufgeht, wie schnell sie reagiert und wo sie sitzt."));
+
+        p.Children.Add(SectionTitle("Wenn du nichts machst"));
+        var restNames = new Dictionary<string, string> { ["Zu"] = "Zugeklappt", ["Halb"] = "Halb offen", ["Offen"] = "Ganz offen" };
+        p.Children.Add(Card(
+            Row("Die Insel ist …", "Halb offen: grösser mit Cover/Uhr. Ganz offen: bleibt immer aufgeklappt.", null,
+                below: Segmented(restNames.Values.ToArray(), restNames.TryGetValue(_s.Ruhezustand, out var rn) ? rn : "Zugeklappt", v =>
+                {
+                    _s.Ruhezustand = restNames.First(x => x.Value == v).Key;
+                    _s.NotifyChanged();
+                }), glyph: "\uE8A0")));
 
         p.Children.Add(SectionTitle("Öffnen & Schliessen"));
         p.Children.Add(Card(
@@ -520,6 +623,10 @@ public sealed class SettingsWindow : Window
 
         p.Children.Add(SectionTitle("Bildschirmrand"));
         p.Children.Add(Card(
+            Row("Oben in der Mitte ankleben", "Zieh sie ungefähr nach oben in die Mitte – sie fliegt hin und klebt an, wie beim MacBook.",
+                Toggle(_s.MagnetOben, v => { _s.MagnetOben = v; _s.NotifyChanged(); }), glyph: "\uE718"),
+            Row("Notch-Look", "Oben bündig am Rand mit geraden Ecken – wie die Kerbe beim MacBook. Aus = schwebt mit kleinem Abstand.",
+                Toggle(_s.NotchLook, v => { _s.NotchLook = v; _s.NotifyChanged(); }), glyph: "\uE7F4"),
             Row("Am Rand andocken", "Zieh die Insel nah an einen Rand – sie klebt bündig dran und geht zur Mitte hin auf.", null, glyph: "\uE8A0"),
             Row("In den Rand eindrücken", "Schieb sie ganz in den Rand → nur ein schmaler Streifen bleibt. Klick drauf oder rausziehen holt sie zurück.",
                 Toggle(_s.AmRandVerstecken, v => { _s.AmRandVerstecken = v; _s.NotifyChanged(); }), glyph: "\uE73F")));
@@ -527,7 +634,7 @@ public sealed class SettingsWindow : Window
         p.Children.Add(SectionTitle("Ruheanzeige"));
         p.Children.Add(Card(
             Row("Wenn keine Musik läuft", "Tipp: Mausrad über der zugeklappten Insel wechselt auch", null,
-                below: Segmented(new[] { "Datum", "Uhr", "Akku", "Leistung", "Minimal" }, _s.RuheWidget,
+                below: Segmented(new[] { "Datum", "Uhr", "Wetter", "Akku", "Leistung", "Minimal" }, _s.RuheWidget,
                     v => { _s.RuheWidget = v; _s.NotifyChanged(); }), glyph: "\uE823"),
             Row("Bei Pause wechseln nach", "Pausierte Musik verschwindet nach dieser Zeit aus der zugeklappten Insel",
                 SliderControl(0, 300, _s.PauseZuRuheSekunden, v => v < 1 ? "nie" : v < 60 ? $"{v:0} s" : $"{v / 60:0.#} min",
@@ -663,8 +770,96 @@ public sealed class SettingsWindow : Window
             Row("Musikquelle", null, Segmented(new[] { "Nur Spotify", "Alle Apps" }, _s.NurSpotify ? "Nur Spotify" : "Alle Apps",
                 v => { _s.NurSpotify = v == "Nur Spotify"; _s.NotifyChanged(); }), glyph: ""),
             Info("Läuft über die eingebaute Windows-Mediensteuerung: kein Login, kein Spotify Premium, kein Internet nötig. " +
-                 "„Alle Apps“ zeigt auch YouTube, Browser, Apple Music usw. Spotify hat immer Vorrang.")));
+                 "„Alle Apps“ zeigt auch YouTube, Browser, Apple Music usw. Spotify hat immer Vorrang.\n" +
+                 "Tipp: In der offenen Insel oben rechts auf „•••“ klicken → dort wechselst du jederzeit zwischen Spotify, Browser & Co.")));
+
+        p.Children.Add(SectionTitle("Lyrics"));
+        p.Children.Add(Card(
+            Row("Songtexte anzeigen", "Zeitgenau mitlaufend unter dem Song", Toggle(_s.Lyrics, v => { _s.Lyrics = v; _s.NotifyChanged(); RebuildPage(); }), glyph: "\uE8D2"),
+            Row("Auch in der kleinen Insel", "Zugeklappt läuft die aktuelle Zeile statt dem Titel", Toggle(_s.LyricsKompakt,
+                v => { _s.LyricsKompakt = v; _s.NotifyChanged(); }), glyph: "\uE8A9"),
+            Info("Lyrics kommen von lrclib.net (kostenlos, ohne Konto). Dafür werden nur Songtitel, Künstler und Länge gesendet – sonst nichts.")));
+
+        p.Children.Add(SectionTitle("Wetter"));
+        var place = new TextBox { Text = _s.WetterOrt, Width = 220 }.Themed(StyleProperty, "DarkBox");
+        var status = new TextBlock { FontSize = 12, Margin = new Thickness(0, 8, 0, 0), TextWrapping = TextWrapping.Wrap }.Themed(TextBlock.ForegroundProperty, "S.Sub");
+        status.Text = string.IsNullOrWhiteSpace(_s.WetterOrtName) ? "Noch kein Ort gewählt." : "Gefunden: " + _s.WetterOrtName;
+        var search = Btn("Suchen", "Primary", async () =>
+        {
+            status.Text = "Suche …";
+            var ok = await WeatherService.SetPlaceAsync(_s, place.Text);
+            status.Text = ok ? "Gefunden: " + _s.WetterOrtName : "Nichts gefunden – versuch es mit einer Stadt, z. B. „Basel“.";
+        });
+        search.Margin = new Thickness(8, 0, 0, 0);
+        place.KeyDown += (_, e) => { if (e.Key == Key.Enter) search.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent)); };
+        var placeRow = new StackPanel { Orientation = Orientation.Horizontal };
+        placeRow.Children.Add(place);
+        placeRow.Children.Add(search);
+        var placePanel = new StackPanel();
+        placePanel.Children.Add(placeRow);
+        placePanel.Children.Add(status);
+        p.Children.Add(Card(
+            Row("Ort", "Für das Wetter-Widget und die Ruheanzeige „Wetter“", null, below: placePanel, glyph: "\uE707"),
+            Info("Wetter kommt von open-meteo.com (kostenlos, ohne Konto). Gesendet wird nur der Ort – alle 30 Minuten, und nur wenn das Wetter benutzt wird.")));
     }
+
+    // ================================================================== Aufgaben
+
+    private void BuildTasks(StackPanel p)
+    {
+        p.Children.Add(Header("Aufgaben"));
+        p.Children.Add(Sub("Deine To-dos. Ist eine fällig, klappt die Insel auf und erinnert dich. Alles bleibt auf diesem PC."));
+
+        var rows = new List<UIElement>();
+        var open = _s.Aufgaben.Where(a => !a.Erledigt).OrderBy(a => a.Faellig ?? DateTime.MaxValue).ToList();
+        foreach (var task in open)
+        {
+            var t = task;
+            var grid = new Grid { Margin = new Thickness(12, 8, 8, 8) };
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var text = Box(t.Text, v => { t.Text = v; _s.NotifyChangedSoon(); });
+            var due = new TextBlock
+            {
+                Text = t.Faellig is DateTime d ? Island.Modules.TasksModule.FormatDue(d) : "ohne Zeit",
+                FontSize = 12, Margin = new Thickness(10, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center,
+            }.Themed(TextBlock.ForegroundProperty, "S.Sub");
+            var edit = IconBtn("\uE70F", "Zeit ändern", () => Island.Modules.TaskEditorWindow.Open(_s, t));
+            var done = IconBtn("\uE73E", "Erledigt", () => { t.Erledigt = true; _s.NotifyChanged(); RebuildPage(); });
+            Grid.SetColumn(due, 1);
+            Grid.SetColumn(edit, 2);
+            Grid.SetColumn(done, 3);
+            grid.Children.Add(text);
+            grid.Children.Add(due);
+            grid.Children.Add(edit);
+            grid.Children.Add(done);
+            rows.Add(grid);
+        }
+        if (rows.Count == 0) rows.Add(Info("Keine offenen Aufgaben."));
+        p.Children.Add(Card(rows.ToArray()));
+
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal };
+        buttons.Children.Add(Btn("+ Neue Aufgabe", "Primary", () => Island.Modules.TaskEditorWindow.Open(_s, null)));
+        var clear = Btn("Erledigte löschen", "Secondary", () => { _s.Aufgaben.RemoveAll(a => a.Erledigt); _s.NotifyChanged(); RebuildPage(); });
+        clear.Margin = new Thickness(8, 0, 0, 0);
+        buttons.Children.Add(clear);
+        p.Children.Add(buttons);
+
+        p.Children.Add(SectionTitle("Erinnerung"));
+        p.Children.Add(Card(
+            Row("Ton abspielen", "Kurzer Windows-Ton, wenn die Insel dich erinnert", Toggle(_s.AufgabenTon, v => { _s.AufgabenTon = v; _s.NotifyChanged(); }), glyph: "\uE767"),
+            Info("Schneller geht's direkt in der Insel: Tab „Aufgaben“ → +. Kreis antippen = erledigt.")));
+
+        // Liste neu zeigen, wenn im kleinen Fenster etwas geändert wurde
+        void Changed() { if (_currentPage == "Aufgaben") Dispatcher.InvokeAsync(RebuildPage, DispatcherPriority.Background); }
+        _s.Changed -= _tasksListener;
+        _tasksListener = Changed;
+        _s.Changed += _tasksListener;
+    }
+
+    private Action? _tasksListener;
 
     private void BuildApps(StackPanel p)
     {
@@ -707,16 +902,80 @@ public sealed class SettingsWindow : Window
         p.Children.Add(new Border { Height = 14 });
         if (_appPickerOpen) p.Children.Add(Card(BuildAppPicker()));
 
+        // ---------- Ordner
+        p.Children.Add(SectionTitle("Ordner"));
+        var folderRows = new List<UIElement>();
+        for (int fi = 0; fi < _s.AppOrdner.Count; fi++)
+        {
+            var index = fi;
+            var oldName = _s.AppOrdner[fi];
+            var count = _s.Schnellstart.Count(a => string.Equals(a.Ordner, oldName, StringComparison.OrdinalIgnoreCase));
+            var g = new Grid { Margin = new Thickness(12, 8, 8, 8) };
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(30) });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var icon = new TextBlock { Text = "\uE8B7", FontFamily = Ui.IconFont, FontSize = 15, VerticalAlignment = VerticalAlignment.Center };
+            var name = Box(oldName, v =>
+            {
+                var current = _s.AppOrdner[index];
+                var newName = v.Trim();
+                if (newName.Length == 0 || newName == current) return;
+                foreach (var a in _s.Schnellstart.Where(a => string.Equals(a.Ordner, current, StringComparison.OrdinalIgnoreCase))) a.Ordner = newName;
+                _s.AppOrdner[index] = newName;
+                _s.NotifyChangedSoon();
+            });
+            var info = new TextBlock { Text = count == 1 ? "1 App" : $"{count} Apps", FontSize = 12, Margin = new Thickness(10, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center }
+                .Themed(TextBlock.ForegroundProperty, "S.Sub");
+            var up = IconBtn("\uE70E", "Nach vorne", () => { Move(_s.AppOrdner, index, -1); _s.NotifyChanged(); RebuildPage(); });
+            var down = IconBtn("\uE70D", "Nach hinten", () => { Move(_s.AppOrdner, index, 1); _s.NotifyChanged(); RebuildPage(); });
+            var del = IconBtn("\uE74D", "Ordner löschen (Apps bleiben)", () =>
+            {
+                var current = _s.AppOrdner[index];
+                foreach (var a in _s.Schnellstart.Where(a => string.Equals(a.Ordner, current, StringComparison.OrdinalIgnoreCase))) a.Ordner = null;
+                _s.AppOrdner.RemoveAt(index);
+                _s.NotifyChanged();
+                RebuildPage();
+            });
+            Grid.SetColumn(name, 1); Grid.SetColumn(info, 2); Grid.SetColumn(up, 3); Grid.SetColumn(down, 4); Grid.SetColumn(del, 5);
+            g.Children.Add(icon); g.Children.Add(name); g.Children.Add(info); g.Children.Add(up); g.Children.Add(down); g.Children.Add(del);
+            folderRows.Add(g);
+        }
+        var newFolder = new TextBox { Width = 200 }.Themed(StyleProperty, "DarkBox");
+        var createFolder = Btn("Ordner erstellen", "Primary", () =>
+        {
+            var n = newFolder.Text.Trim();
+            if (n.Length == 0) n = $"Ordner {_s.AppOrdner.Count + 1}";
+            if (_s.AppOrdner.Contains(n, StringComparer.OrdinalIgnoreCase)) return;
+            _s.AppOrdner.Add(n);
+            _s.NotifyChanged();
+            RebuildPage();
+        });
+        createFolder.Margin = new Thickness(8, 0, 0, 0);
+        newFolder.KeyDown += (_, e) => { if (e.Key == Key.Enter) createFolder.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent)); };
+        var createRow = new StackPanel { Orientation = Orientation.Horizontal };
+        createRow.Children.Add(newFolder);
+        createRow.Children.Add(createFolder);
+        folderRows.Add(Row("Neuer Ordner", "z. B. „Schule“, „Games“, „Arbeit“ – Apps ordnest du unten mit dem Ordner-Knopf zu.", null, below: createRow, glyph: "\uE8F4"));
+        p.Children.Add(Card(folderRows.ToArray()));
+
         // ---------- Deine Apps
         p.Children.Add(SectionTitle("Deine Apps"));
         var rows = new List<UIElement>();
-        foreach (var entry in _s.Schnellstart.ToList())
+        var list = _s.Schnellstart;
+        for (int ai = 0; ai < list.Count; ai++)
         {
-            var item = entry;
+            var item = list[ai];
+            var appIndex = ai;
             var grid = new Grid { Margin = new Thickness(12, 8, 8, 8) };
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(34) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(130) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
             var icon = new Image { Width = 24, Height = 24, VerticalAlignment = VerticalAlignment.Center, Source = AppIcon(item.Icon ?? item.Ziel) };
@@ -730,17 +989,52 @@ public sealed class SettingsWindow : Window
                 RebuildPage();
             });
 
+            // Ordner wählen (kleines Menü)
+            var folderBtn = IconBtn(string.IsNullOrWhiteSpace(item.Ordner) ? "\uE8B7" : "\uE838",
+                string.IsNullOrWhiteSpace(item.Ordner) ? "In einen Ordner legen" : "Ordner: " + item.Ordner, () => { });
+            folderBtn.Click += (_, _) =>
+            {
+                var menu = new ContextMenu { PlacementTarget = folderBtn };
+                var none = new MenuItem { Header = "Kein Ordner", IsCheckable = true, IsChecked = string.IsNullOrWhiteSpace(item.Ordner) };
+                none.Click += (_, _) => { item.Ordner = null; _s.NotifyChanged(); RebuildPage(); };
+                menu.Items.Add(none);
+                foreach (var folder in _s.AppOrdner)
+                {
+                    var f = folder;
+                    var mi = new MenuItem { Header = f, IsCheckable = true, IsChecked = string.Equals(item.Ordner, f, StringComparison.OrdinalIgnoreCase) };
+                    mi.Click += (_, _) => { item.Ordner = f; _s.NotifyChanged(); RebuildPage(); };
+                    menu.Items.Add(mi);
+                }
+                if (_s.AppOrdner.Count == 0) menu.Items.Add(new MenuItem { Header = "(Erstell oben zuerst einen Ordner)", IsEnabled = false });
+                menu.IsOpen = true;
+            };
+            var up = IconBtn("\uE70E", "Nach vorne", () => { Move(_s.Schnellstart, appIndex, -1); _s.NotifyChanged(); RebuildPage(); });
+            var down = IconBtn("\uE70D", "Nach hinten", () => { Move(_s.Schnellstart, appIndex, 1); _s.NotifyChanged(); RebuildPage(); });
+
             Grid.SetColumn(name, 1);
             Grid.SetColumn(target, 2);
-            Grid.SetColumn(delete, 3);
+            Grid.SetColumn(folderBtn, 3);
+            Grid.SetColumn(up, 4);
+            Grid.SetColumn(down, 5);
+            Grid.SetColumn(delete, 6);
             grid.Children.Add(icon);
             grid.Children.Add(name);
             grid.Children.Add(target);
+            grid.Children.Add(folderBtn);
+            grid.Children.Add(up);
+            grid.Children.Add(down);
             grid.Children.Add(delete);
             rows.Add(grid);
         }
         if (rows.Count == 0) rows.Add(Info("Noch keine Apps. Wähl oben welche aus oder zieh sie hier hinein."));
         p.Children.Add(Card(rows.ToArray()));
+    }
+
+    private static void Move<T>(List<T> list, int index, int delta)
+    {
+        var target = index + delta;
+        if (index < 0 || index >= list.Count || target < 0 || target >= list.Count) return;
+        (list[index], list[target]) = (list[target], list[index]);
     }
 
     private static Button Spaced(Button b)
@@ -1056,7 +1350,7 @@ public sealed class SettingsWindow : Window
         p.Children.Add(Sub("Selbst gebaut, Open Source – keine Daten werden irgendwohin gesendet."));
 
         p.Children.Add(Card(
-            Row("Dynamic Island", "Version 1.5", null, glyph: ""),
+            Row("Dynamic Island", "Version 1.6", null, glyph: ""),
             Row("Einstellungsdatei", "Alles als Text bearbeiten (für Profis)",
                 Btn("Öffnen", "Secondary", () => IslandContext.Open("notepad.exe", $"\"{Settings.FilePath}\""))),
             Row("Fehlerprotokoll", "Falls etwas nicht klappt – Inhalt an Claude schicken",
@@ -1282,6 +1576,7 @@ public sealed class SettingsWindow : Window
         {
             Theme.Gradient => Theme.Linear(d.VerlaufWinkel, (c1, 0), (c2, 1)),
             Theme.Glass => Theme.Linear(90, (Color.FromArgb(150, 255, 255, 255), 0), (Color.FromArgb(200, c1.R, c1.G, c1.B), 0.5), (Color.FromArgb(170, c1.R, c1.G, c1.B), 1)),
+            Theme.Cover => Theme.Linear(120, (Theme.Blend(Color.FromRgb(12, 12, 15), Theme.ParseColor(d.Akzent, Colors.HotPink), 0.3), 0), (Color.FromRgb(12, 12, 15), 1)),
             Theme.PureGlass => Theme.Linear(90,
                 (Color.FromArgb((byte)(200 - 140 * d.GlasKlarheit), 255, 255, 255), 0),
                 (Color.FromArgb((byte)(120 - 90 * d.GlasKlarheit), 200, 205, 215), 1)),
