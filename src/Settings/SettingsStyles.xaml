@@ -2,15 +2,16 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!-- Farben im Stil von macOS / iOS (dunkel) -->
-    <SolidColorBrush x:Key="S.Bg" Color="#FF1C1C1E"/>
-    <SolidColorBrush x:Key="S.Side" Color="#FF161618"/>
-    <SolidColorBrush x:Key="S.Card" Color="#FF2C2C2E"/>
-    <SolidColorBrush x:Key="S.Line" Color="#FF3A3A3C"/>
-    <SolidColorBrush x:Key="S.Control" Color="#FF3A3A3C"/>
-    <SolidColorBrush x:Key="S.ControlHover" Color="#FF48484A"/>
-    <SolidColorBrush x:Key="S.Text" Color="#FFFFFFFF"/>
-    <SolidColorBrush x:Key="S.Sub" Color="#FF8E8E93"/>
-    <SolidColorBrush x:Key="S.Accent" Color="#FF0A84FF"/>
+    <!-- Ruhig und minimal: wenig Kontrast zwischen Flächen, eine sanfte Akzentfarbe -->
+    <SolidColorBrush x:Key="S.Bg" Color="#FF141416"/>
+    <SolidColorBrush x:Key="S.Side" Color="#FF141416"/>
+    <SolidColorBrush x:Key="S.Card" Color="#FF1C1C1F"/>
+    <SolidColorBrush x:Key="S.Line" Color="#FF27272B"/>
+    <SolidColorBrush x:Key="S.Control" Color="#FF2A2A2E"/>
+    <SolidColorBrush x:Key="S.ControlHover" Color="#FF333338"/>
+    <SolidColorBrush x:Key="S.Text" Color="#FFF2F2F4"/>
+    <SolidColorBrush x:Key="S.Sub" Color="#FF85858C"/>
+    <SolidColorBrush x:Key="S.Accent" Color="#FF4A8CF7"/>
     <SolidColorBrush x:Key="S.Green" Color="#FF34C759"/>
     <SolidColorBrush x:Key="S.Red" Color="#FFFF453A"/>
     <FontFamily x:Key="S.Icons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
@@ -92,22 +93,25 @@
     <!-- Eintrag in der Seitenleiste -->
     <Style x:Key="NavItem" TargetType="RadioButton">
         <Setter Property="Foreground" Value="{StaticResource S.Text}"/>
-        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontSize" Value="13.5"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Focusable" Value="False"/>
-        <Setter Property="Margin" Value="10,1"/>
+        <Setter Property="Margin" Value="12,1"/>
+        <Setter Property="Opacity" Value="0.62"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="RadioButton">
-                    <Border x:Name="Bg" Background="Transparent" CornerRadius="7" Padding="10,7">
+                    <Border x:Name="Bg" Background="Transparent" CornerRadius="8" Padding="10,8">
                         <ContentPresenter VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bg" Property="Background" Value="#1AFFFFFF"/>
+                            <Setter Property="Opacity" Value="0.9"/>
+                            <Setter TargetName="Bg" Property="Background" Value="#0DFFFFFF"/>
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="Bg" Property="Background" Value="{StaticResource S.Accent}"/>
+                            <Setter Property="Opacity" Value="1"/>
+                            <Setter TargetName="Bg" Property="Background" Value="#17FFFFFF"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

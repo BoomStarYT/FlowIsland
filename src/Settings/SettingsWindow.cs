@@ -77,7 +77,7 @@ public sealed class SettingsWindow : Window
 
     private readonly Settings _s;
     private readonly MainWindow _island;
-    private readonly ContentControl _page = new() { Focusable = false };
+    private readonly ContentControl _page = new() { Focusable = false, MaxWidth = 760 };
     private readonly ScrollViewer _scroll;
     private readonly Border _restartBanner;
     private readonly StackPanel _nav = new();
@@ -136,14 +136,17 @@ public sealed class SettingsWindow : Window
         UseLayoutRounding = true;
 
         // ---------- Seitenleiste
-        var side = new Border { CornerRadius = new CornerRadius(14, 0, 0, 14) }.Themed(Border.BackgroundProperty, "S.Side");
+        var side = new Border { CornerRadius = new CornerRadius(14, 0, 0, 14), BorderThickness = new Thickness(0, 0, 1, 0) }
+            .Themed(Border.BackgroundProperty, "S.Side");
+        side.SetResourceReference(Border.BorderBrushProperty, "S.Line");
+        _side = side;
         side.MouseLeftButtonDown += DragWindow;
         var sideStack = new StackPanel();
 
         var dots = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(16, 16, 0, 20) };
         dots.Children.Add(WindowDot("#FF5F57", "", Close));
         dots.Children.Add(WindowDot("#FEBC2E", "", () => WindowState = WindowState.Minimized));
-        dots.Children.Add(WindowDot("#3A3A3C", "", null));
+        dots.Children.Add(WindowDot("#28C840", "", ToggleFullscreen));
         sideStack.Children.Add(dots);
 
         var brand = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(22, 0, 0, 18) };
@@ -209,6 +212,7 @@ public sealed class SettingsWindow : Window
             RenderTransform = new ScaleTransform(0.96, 0.96),
         }.Themed(Border.BackgroundProperty, "S.Bg");
         Content = frame;
+        _frame = frame;
         // Weich aufgehen wie bei macOS
         Loaded += (_, _) =>
         {
@@ -1564,9 +1568,9 @@ public sealed class SettingsWindow : Window
     private static TextBlock Header(string text) => new()
     {
         Text = text,
-        FontSize = 26,
-        FontWeight = FontWeights.Bold,
-        Margin = new Thickness(0, 0, 0, 4),
+        FontSize = 24,
+        FontWeight = FontWeights.SemiBold,
+        Margin = new Thickness(0, 4, 0, 4),
     };
 
     private static TextBlock Sub(string text) => new TextBlock
@@ -1574,7 +1578,7 @@ public sealed class SettingsWindow : Window
         Text = text,
         FontSize = 12.5,
         TextWrapping = TextWrapping.Wrap,
-        Margin = new Thickness(0, 0, 0, 18),
+        Margin = new Thickness(0, 0, 0, 26),
     }.Themed(TextBlock.ForegroundProperty, "S.Sub");
 
     private static TextBlock SectionTitle(string text) => new TextBlock
@@ -1611,38 +1615,26 @@ public sealed class SettingsWindow : Window
         var stack = new StackPanel();
         for (int i = 0; i < rows.Length; i++)
         {
-            if (i > 0) stack.Children.Add(new Border { Height = 1, Margin = new Thickness(14, 0, 0, 0) }.Themed(Border.BackgroundProperty, "S.Line"));
+            if (i > 0) stack.Children.Add(new Border { Height = 1, Margin = new Thickness(18, 0, 0, 0) }.Themed(Border.BackgroundProperty, "S.Line"));
             stack.Children.Add(rows[i]);
         }
         return new Border
         {
-            CornerRadius = new CornerRadius(11),
+            CornerRadius = new CornerRadius(12),
             Child = stack,
-            Margin = new Thickness(0, 0, 0, 20),
+            Margin = new Thickness(0, 0, 0, 26),
         }.Themed(Border.BackgroundProperty, "S.Card");
     }
 
     private static FrameworkElement Row(string label, string? hint, FrameworkElement? control,
                                         FrameworkElement? below = null, string? glyph = null)
     {
-        var grid = new Grid { Margin = new Thickness(14, 10, 14, below != null ? 6 : 10), MinHeight = 30 };
+        var grid = new Grid { Margin = new Thickness(18, 13, 16, below != null ? 8 : 13), MinHeight = 30 };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         var left = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        if (glyph != null)
-        {
-            left.Children.Add(new Border
-            {
-                Width = 26, Height = 26, CornerRadius = new CornerRadius(7), Margin = new Thickness(0, 0, 12, 0),
-                VerticalAlignment = VerticalAlignment.Center,
-                Child = new TextBlock
-                {
-                    Text = glyph, FontFamily = Ui.IconFont, FontSize = 13, Foreground = Brushes.White,
-                    HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
-                },
-            }.Themed(Border.BackgroundProperty, "S.Accent"));
-        }
+        // Minimal: keine bunten Symbol-Kästchen mehr, nur Text
         var texts = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         texts.Children.Add(new TextBlock { Text = label, FontSize = 13.5 });
         if (hint != null)
@@ -1665,7 +1657,7 @@ public sealed class SettingsWindow : Window
 
         if (below == null) return grid;
         var outer = new StackPanel();
-        below.Margin = new Thickness(14, 0, 14, 12);
+        below.Margin = new Thickness(18, 0, 16, 14);
         outer.Children.Add(grid);
         outer.Children.Add(below);
         return outer;
@@ -1929,6 +1921,22 @@ public sealed class SettingsWindow : Window
         return button;
     }
 
+    private Border? _frame;
+    private Border? _side;
+
+    /// <summary>Grüner Knopf / Doppelklick auf die Leiste: Vollbild an/aus.</summary>
+    private void ToggleFullscreen()
+    {
+        var full = WindowState != WindowState.Maximized;
+        WindowState = full ? WindowState.Maximized : WindowState.Normal;
+        if (_frame != null)
+        {
+            _frame.CornerRadius = new CornerRadius(full ? 0 : 14);
+            _frame.BorderThickness = new Thickness(full ? 0 : 1);
+        }
+        if (_side != null) _side.CornerRadius = new CornerRadius(full ? 0 : 14, 0, 0, full ? 0 : 14);
+    }
+
     private static Button WindowDot(string color, string glyph, Action? action)
     {
         var button = new Button { Background = Ui.Brush(color), Content = glyph }.Themed(StyleProperty, "WindowDot");
@@ -1977,6 +1985,8 @@ public sealed class SettingsWindow : Window
     private void DragWindow(object sender, MouseButtonEventArgs e)
     {
         if (e.ButtonState != MouseButtonState.Pressed) return;
+        if (e.ClickCount == 2) { ToggleFullscreen(); return; }
+        if (WindowState == WindowState.Maximized) return;
         try { DragMove(); }
         catch (InvalidOperationException) { /* egal */ }
     }
