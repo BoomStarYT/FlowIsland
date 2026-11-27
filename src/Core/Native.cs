@@ -217,6 +217,13 @@ internal static class Native
         catch { return null; }
     }
 
+    /// <summary>Klicks gehen durch das Fenster hindurch.</summary>
+    public static void MakeClickThrough(IntPtr hwnd)
+    {
+        var style = GetWindowLong(hwnd, GWL_EXSTYLE);
+        SetWindowLong(hwnd, GWL_EXSTYLE, style | 0x20 /* WS_EX_TRANSPARENT */);
+    }
+
     /// <summary>Kein Alt+Tab-Eintrag, kein Fokus-Klauen.</summary>
     public static void MakeToolWindow(IntPtr hwnd)
     {

@@ -60,6 +60,7 @@ public partial class MainWindow : Window, IIslandHost
     private IntPtr _hwnd;
     private bool _blurOn;
     private GlassBackdrop? _glass;
+    private LyricsWindow? _lyricsWin;
 
     /// <summary>RAM-Begrenzer (wird in den Einstellungen bedient).</summary>
     public RamLimiter Ram { get; }
@@ -150,6 +151,9 @@ public partial class MainWindow : Window, IIslandHost
         };
         Theme.CoverChanged += OnCoverChanged;
         IsVisibleChanged += (_, _) => UpdateBlur();
+        Pill.LayoutUpdated += OnPillLayout;
+        LocationChanged += OnPillLayout;
+        LyricsBus.Changed += OnLyricsChanged;
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
         Closed += OnClosed;
         _settings.Changed += OnSettingsChanged;
@@ -1140,28 +1144,66 @@ public partial class MainWindow : Window, IIslandHost
                     return;
                 }
             }
-            if (!_blurOn)
-            {
-                _blurOn = true;
-                Pill.LayoutUpdated += OnPillLayout;
-                LocationChanged += OnPillLayout;
-            }
+            _blurOn = true;
             UpdateRegion();
             _glass.Show();
         }
         else
         {
-            if (_blurOn)
-            {
-                _blurOn = false;
-                Pill.LayoutUpdated -= OnPillLayout;
-                LocationChanged -= OnPillLayout;
-            }
+            _blurOn = false;
             _glass?.Hide();
         }
+        UpdateLyricsWindow();
     }
 
-    private void OnPillLayout(object? sender, EventArgs e) => UpdateRegion();
+    private void OnPillLayout(object? sender, EventArgs e)
+    {
+        UpdateRegion();
+        PositionLyrics();
+    }
+
+    // ================================================================== Lyrics neben der Insel
+
+    private void OnLyricsChanged() => Dispatcher.InvokeAsync(UpdateLyricsWindow);
+
+    private void UpdateLyricsWindow()
+    {
+        var want = _settings.LyricsSeite && LyricsBus.Active && IsVisible && !_hiddenForFullscreen && !Tucked && !_isDragging;
+        if (!want)
+        {
+            _lyricsWin?.Hide();
+            return;
+        }
+        if (_lyricsWin == null)
+        {
+            _lyricsWin = new LyricsWindow();
+            _lyricsWin.Show();
+            _lyricsWin.SetBlur(Theme.BlurWanted(_settings));
+        }
+        _lyricsWin.ApplyLook();
+        _lyricsWin.SetText(LyricsBus.Now, LyricsBus.Next, LyricsBus.Playing);
+        if (!_lyricsWin.IsVisible)
+        {
+            _lyricsWin.Show();
+            Anim.To(_lyricsWin, OpacityProperty, 1, 260, Anim.Smooth, from: 0);
+        }
+        _lyricsWin.SetBlur(Theme.BlurWanted(_settings));
+        PositionLyrics();
+    }
+
+    private void PositionLyrics()
+    {
+        if (_lyricsWin == null || !_lyricsWin.IsVisible || PresentationSource.FromVisual(Pill) == null) return;
+        Point a, b;
+        try
+        {
+            a = Pill.PointToScreen(new Point(0, 0));
+            b = Pill.PointToScreen(new Point(Pill.ActualWidth, Pill.ActualHeight));
+        }
+        catch { return; }
+        var d = DeviceScale();
+        _lyricsWin.Anchor(new Rect(a, b), RestHeight() * Scale * d, d);
+    }
 
     /// <summary>Glas-Fenster genau unter die Insel legen (Bildschirm-Pixel).</summary>
     private void UpdateRegion()
@@ -1245,6 +1287,7 @@ public partial class MainWindow : Window, IIslandHost
         if (!_settings.AkzentVomCover && _settings.Stil != Theme.Cover) return;
         Theme.Apply(_settings, PillBg, PillSheen, PillRim, PillShadow);
         if (Tucked) ApplyTuckLook(true);
+        _lyricsWin?.ApplyLook();
     }
 
     public void OpenSettings() => OpenSettings(null);
@@ -1388,6 +1431,8 @@ public partial class MainWindow : Window, IIslandHost
         _cacheTimer.Stop();
         _alertTimer.Stop();
         Theme.CoverChanged -= OnCoverChanged;
+        LyricsBus.Changed -= OnLyricsChanged;
+        _lyricsWin?.Close();
         _glass?.Dispose();
         _settings.Changed -= OnSettingsChanged;
         _settings.Save();

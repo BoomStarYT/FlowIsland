@@ -47,6 +47,9 @@ public sealed class MediaModule : IslandModule
 
     private bool LyricsVisible => Context.Settings.Lyrics && _hasMedia;
 
+    /// <summary>Lyrics werden irgendwo gebraucht (unter dem Song, in der kleinen Insel oder daneben).</summary>
+    private bool LyricsWanted => Context.Settings.Lyrics || Context.Settings.LyricsKompakt || Context.Settings.LyricsSeite;
+
     private MediaView _view = null!;
     private Grid _compact = null!;
     private Border _compactCover = null!;
@@ -139,7 +142,9 @@ public sealed class MediaModule : IslandModule
             _lastNurSpotify = Context.Settings.NurSpotify;
             _ = SelectSessionAsync(force: true);
         }
-        if (Context.Settings.Lyrics) _ = LoadLyricsAsync();
+        if (LyricsWanted) _ = LoadLyricsAsync();
+        PublishLyrics();
+        UpdateLyricsTimer();
         ApplyLyricsVisibility();
         if (lyricsBefore != (_view.LyricsPanel.Visibility == Visibility.Visible)) Context.RequestLayoutRefresh();
         UpdateCompactTitle();
@@ -434,6 +439,7 @@ public sealed class MediaModule : IslandModule
         UpdatePlayState();
         UpdateTicking();
         ApplyLyricsVisibility();
+        PublishLyrics();
         if (hadMedia && Context.Settings.Lyrics) Context.RequestLayoutRefresh();
         Context.RequestCompactRefresh();
     }
@@ -512,6 +518,7 @@ public sealed class MediaModule : IslandModule
         Anim.To(_view.CoverScale, ScaleTransform.ScaleXProperty, coverScale, 520, Anim.Spring);
         Anim.To(_view.CoverScale, ScaleTransform.ScaleYProperty, coverScale, 520, Anim.Spring);
         UpdateLyricsTimer();
+        PublishLyrics();
     }
 
     /// <summary>Merkt sich, seit wann pausiert ist (für den Wechsel zur Ruheanzeige).</summary>
@@ -570,7 +577,7 @@ public sealed class MediaModule : IslandModule
 
     private async Task LoadLyricsAsync()
     {
-        if (!Context.Settings.Lyrics || !_hasMedia) return;
+        if (!LyricsWanted || !_hasMedia) return;
         var key = _songKey;
         if (key == null || key == _lyricsKey) return;
         _lyricsKey = key;
@@ -587,6 +594,7 @@ public sealed class MediaModule : IslandModule
         _lyricIndex = -2;
         if (lines == null) ShowLyricText("Keine Lyrics gefunden", "", animate: true);
         UpdateLyricLine(animate: true);
+        PublishLyrics();
         UpdateCompactTitle();
         UpdateLyricsTimer();
     }
@@ -599,8 +607,10 @@ public sealed class MediaModule : IslandModule
 
     private void UpdateLyricsTimer()
     {
-        var needed = _playing && _hasMedia && _lyrics != null && Context.Settings.Lyrics
-                     && ((_shown && !_sourceOpen) || (Context.Settings.LyricsKompakt && _compactTitle.IsVisible));
+        var needed = _playing && _hasMedia && _lyrics != null
+                     && ((Context.Settings.Lyrics && _shown && !_sourceOpen)
+                         || (Context.Settings.LyricsKompakt && _compactTitle.IsVisible)
+                         || Context.Settings.LyricsSeite);
         if (needed) { if (!_lyricsTimer.IsEnabled) _lyricsTimer.Start(); }
         else _lyricsTimer.Stop();
     }
@@ -617,6 +627,16 @@ public sealed class MediaModule : IslandModule
         var now = index < 0 ? "♪" : Line(index);
         ShowLyricText(now, Line(index + 1), animate);
         UpdateCompactTitle();
+        PublishLyrics();
+    }
+
+    /// <summary>Für das Lyrics-Feld neben der Insel.</summary>
+    private void PublishLyrics()
+    {
+        var active = Context.Settings.LyricsSeite && _hasMedia && _lyrics != null;
+        if (!active) { LyricsBus.Set(false, _playing, "", ""); return; }
+        string Line(int i) => i >= 0 && i < _lyrics!.Count ? (_lyrics[i].Text.Length > 0 ? _lyrics[i].Text : "♪") : "";
+        LyricsBus.Set(true, _playing, _lyricIndex < 0 ? "♪" : Line(_lyricIndex), Line(_lyricIndex + 1));
     }
 
     private void ShowLyricText(string now, string next, bool animate)
@@ -632,7 +652,7 @@ public sealed class MediaModule : IslandModule
     private void UpdateCompactTitle()
     {
         if (!_hasMedia) { _compactTitle.Text = ""; return; }
-        if (Context.Settings.Lyrics && Context.Settings.LyricsKompakt && _lyrics != null && _lyricIndex >= 0)
+        if (Context.Settings.LyricsKompakt && _lyrics != null && _lyricIndex >= 0)
         {
             var line = _lyrics[Math.Min(_lyricIndex, _lyrics.Count - 1)].Text;
             if (line.Length > 0)
@@ -681,23 +701,28 @@ public sealed class MediaModule : IslandModule
     private async Task FillSourcePanelAsync()
     {
         var panel = _view.SourcePanel;
-        var root = new StackPanel { VerticalAlignment = VerticalAlignment.Top };
+        var root = new Grid();
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        var head = new Grid { Margin = new Thickness(2, 0, 0, 8) };
-        head.Children.Add(new TextBlock { Text = "Was soll die Insel zeigen?", FontSize = 14, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
-        var done = new Button { Content = "", Style = Ui.Style("IconButton"), Width = 30, Height = 30, FontSize = 13, HorizontalAlignment = HorizontalAlignment.Right, ToolTip = "Fertig" };
+        // ---------- Kopf: Titel + Fertig
+        var head = new Grid { Margin = new Thickness(2, -2, -4, 6) };
+        head.Children.Add(new TextBlock { Text = "Quelle", FontSize = 14, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
+        var done = new Button { Content = "", Style = Ui.Style("IconButton"), Width = 28, Height = 28, FontSize = 12, HorizontalAlignment = HorizontalAlignment.Right, ToolTip = "Fertig" };
         done.Click += (_, _) => CloseSourcePanel();
         head.Children.Add(done);
         root.Children.Add(head);
 
-        var chips = new WrapPanel();
+        // ---------- Quellen: eine Zeile, seitlich scrollen wenn's mehr sind
+        var chips = new StackPanel { Orientation = Orientation.Horizontal };
         chips.Children.Add(Chip("", "Automatisch", Context.Settings.NurSpotify ? "Spotify zuerst" : "Was gerade läuft", _manualId == null, () => PickSource(null)));
 
         var sessions = new List<WMC.GlobalSystemMediaTransportControlsSession>();
         try { if (_manager != null) sessions = _manager.GetSessions().ToList(); }
         catch (Exception ex) { App.Log(ex); }
 
-        foreach (var s in sessions.Take(5))
+        foreach (var s in sessions.Take(6))
         {
             string sub = "";
             try
@@ -709,54 +734,81 @@ public sealed class MediaModule : IslandModule
             var id = s.SourceAppUserModelId;
             chips.Children.Add(Chip(AppGlyph(id), AppName(id), sub, _manualId != null && _manualId == id, () => PickSource(id)));
         }
-        if (sessions.Count == 0)
-            chips.Children.Add(new TextBlock { Text = "Gerade spielt keine App etwas ab.", Margin = new Thickness(6, 10, 0, 0) }
-                .Themed(TextBlock.ForegroundProperty, "IslandSubText"));
-        root.Children.Add(chips);
+        var chipScroll = new ScrollViewer
+        {
+            Content = chips,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            Focusable = false,
+        };
+        // Mausrad → seitlich
+        chipScroll.PreviewMouseWheel += (_, e) =>
+        {
+            chipScroll.ScrollToHorizontalOffset(chipScroll.HorizontalOffset - e.Delta * 0.5);
+            e.Handled = true;
+        };
+        Grid.SetRow(chipScroll, 1);
+        root.Children.Add(chipScroll);
 
-        // Lyrics schnell an/aus
-        var toggles = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
-        toggles.Children.Add(Chip("", "Lyrics", Context.Settings.Lyrics ? "an" : "aus", Context.Settings.Lyrics, () =>
+        // ---------- Lyrics: drei kleine Schalter in einer Zeile
+        var lyrics = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 7, 0, 0) };
+        lyrics.Children.Add(new TextBlock { Text = "Lyrics", FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0, 8, 0) }
+            .Themed(TextBlock.ForegroundProperty, "IslandSubText"));
+        void Toggle(string glyph, string label, Func<bool> get, Action<bool> set)
         {
-            Context.Settings.Lyrics = !Context.Settings.Lyrics;
-            Context.Settings.NotifyChanged();
-            _ = FillSourcePanelAsync();
-        }, small: true));
-        if (Context.Settings.Lyrics)
-        {
-            toggles.Children.Add(Chip("", "Lyrics zugeklappt", Context.Settings.LyricsKompakt ? "an" : "aus", Context.Settings.LyricsKompakt, () =>
+            lyrics.Children.Add(Pill(glyph, label, get(), () =>
             {
-                Context.Settings.LyricsKompakt = !Context.Settings.LyricsKompakt;
+                set(!get());
                 Context.Settings.NotifyChanged();
                 _ = FillSourcePanelAsync();
-            }, small: true));
+            }));
         }
-        root.Children.Add(toggles);
+        Toggle("", "Unter dem Song", () => Context.Settings.Lyrics, v => Context.Settings.Lyrics = v);
+        Toggle("", "Kleine Insel", () => Context.Settings.LyricsKompakt, v => Context.Settings.LyricsKompakt = v);
+        Toggle("", "Daneben", () => Context.Settings.LyricsSeite, v => Context.Settings.LyricsSeite = v);
+        Grid.SetRow(lyrics, 2);
+        root.Children.Add(lyrics);
 
         panel.Children.Clear();
-        panel.Children.Add(new ScrollViewer
-        {
-            Content = root,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Hidden,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            Focusable = false,
-        });
+        panel.Children.Add(root);
     }
 
-    private Button Chip(string glyph, string title, string sub, bool selected, Action click, bool small = false)
+    /// <summary>Quelle als Kachel: Symbol im runden Kreis, Name und was gerade läuft.</summary>
+    private Button Chip(string glyph, string title, string sub, bool selected, Action click)
     {
-        var icon = new TextBlock { Text = glyph, FontFamily = Ui.IconFont, FontSize = small ? 12 : 14, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
-        if (selected) icon.Themed(TextBlock.ForegroundProperty, "IslandAccent");
+        var circle = new Border { Width = 30, Height = 30, CornerRadius = new CornerRadius(15), Margin = new Thickness(0, 0, 9, 0), VerticalAlignment = VerticalAlignment.Center };
+        var icon = new TextBlock { Text = glyph, FontFamily = Ui.IconFont, FontSize = 13, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        if (selected)
+        {
+            circle.Themed(Border.BackgroundProperty, "IslandAccent");
+            icon.Foreground = Brushes.White;
+        }
+        else circle.Themed(Border.BackgroundProperty, "IslandHover");
+        circle.Child = icon;
+
         var texts = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        texts.Children.Add(new TextBlock { Text = title, FontSize = small ? 11.5 : 12.5, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
+        texts.Children.Add(new TextBlock { Text = title, FontSize = 12.5, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 108 });
         if (sub.Length > 0)
-            texts.Children.Add(new TextBlock { Text = sub, FontSize = 10.5, MaxWidth = small ? 60 : 118, TextTrimming = TextTrimming.CharacterEllipsis }
+            texts.Children.Add(new TextBlock { Text = sub, FontSize = 10.5, MaxWidth = 108, TextTrimming = TextTrimming.CharacterEllipsis }
                 .Themed(TextBlock.ForegroundProperty, "IslandSubText"));
         var content = new StackPanel { Orientation = Orientation.Horizontal };
-        content.Children.Add(icon);
+        content.Children.Add(circle);
         content.Children.Add(texts);
 
-        var b = new Button { Content = content, Style = Ui.Style("ChipButton"), Margin = new Thickness(0, 0, 6, 6), Tag = selected ? "on" : null };
+        var b = new Button { Content = content, Style = Ui.Style("ChipButton"), Margin = new Thickness(0, 0, 6, 0), Padding = new Thickness(7, 6, 12, 6), Tag = selected ? "on" : null };
+        b.Click += (_, _) => click();
+        return b;
+    }
+
+    /// <summary>Kleiner Schalter (an = Akzentrand + Akzent-Symbol).</summary>
+    private static Button Pill(string glyph, string label, bool on, Action click)
+    {
+        var content = new StackPanel { Orientation = Orientation.Horizontal };
+        var icon = new TextBlock { Text = glyph, FontFamily = Ui.IconFont, FontSize = 10.5, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 1, 5, 0) };
+        if (on) icon.Themed(TextBlock.ForegroundProperty, "IslandAccent");
+        content.Children.Add(icon);
+        content.Children.Add(new TextBlock { Text = label, FontSize = 11, VerticalAlignment = VerticalAlignment.Center });
+        var b = new Button { Content = content, Style = Ui.Style("ChipButton"), Margin = new Thickness(0, 0, 5, 0), Padding = new Thickness(9, 4, 10, 4), Tag = on ? "on" : null };
         b.Click += (_, _) => click();
         return b;
     }

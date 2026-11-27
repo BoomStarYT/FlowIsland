@@ -861,9 +861,11 @@ public sealed class SettingsWindow : Window
 
         p.Children.Add(SectionTitle("Lyrics"));
         p.Children.Add(Card(
-            Row("Songtexte anzeigen", "Zeitgenau mitlaufend unter dem Song", Toggle(_s.Lyrics, v => { _s.Lyrics = v; _s.NotifyChanged(); RebuildPage(); }), glyph: "\uE8D2"),
-            Row("Auch in der kleinen Insel", "Zugeklappt läuft die aktuelle Zeile statt dem Titel", Toggle(_s.LyricsKompakt,
+            Row("Unter dem Song", "Zeitgenau mitlaufend in der offenen Insel", Toggle(_s.Lyrics, v => { _s.Lyrics = v; _s.NotifyChanged(); }), glyph: "\uE8D2"),
+            Row("In der kleinen Insel", "Zugeklappt läuft die aktuelle Zeile statt dem Titel", Toggle(_s.LyricsKompakt,
                 v => { _s.LyricsKompakt = v; _s.NotifyChanged(); }), glyph: "\uE8A9"),
+            Row("Neben der Insel", "Eigenes kleines Feld links daneben – lesbar, auch wenn die Insel zu ist", Toggle(_s.LyricsSeite,
+                v => { _s.LyricsSeite = v; _s.NotifyChanged(); }), glyph: "\uE76B"),
             Info("Lyrics kommen von lrclib.net (kostenlos, ohne Konto). Dafür werden nur Songtitel, Künstler und Länge gesendet – sonst nichts.")));
 
         p.Children.Add(SectionTitle("Wetter"));

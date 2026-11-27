@@ -122,6 +122,9 @@ public sealed class Settings
     /// <summary>Aktuelle Lyrics-Zeile auch in der zugeklappten Insel.</summary>
     public bool LyricsKompakt { get; set; }
 
+    /// <summary>Lyrics in einem eigenen kleinen Feld neben der Insel (auch wenn sie zu ist).</summary>
+    public bool LyricsSeite { get; set; }
+
     /// <summary>Wetter: Ort (z. B. "Basel"). Leer = noch nicht eingerichtet.</summary>
     public string WetterOrt { get; set; } = "";
     public double? WetterLat { get; set; }
