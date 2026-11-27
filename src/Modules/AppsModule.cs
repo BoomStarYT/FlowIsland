@@ -31,7 +31,6 @@ public sealed class AppsModule : IslandModule
     private TranslateTransform _slide = null!;
     private string _signature = "";
     private string? _openFolder;
-    private static readonly Dictionary<string, BitmapSource?> IconCache = new(StringComparer.OrdinalIgnoreCase);
 
     protected override void OnInitialize()
     {
@@ -181,17 +180,10 @@ public sealed class AppsModule : IslandModule
         return new Button { Content = content, Style = Ui.Style("TileButton") };
     }
 
+    /// <summary>Symbol der App. Erst ein Buchstabe, sobald das echte Symbol da ist (auch Store-Apps) → Symbol.</summary>
     private static FrameworkElement AppIcon(SchnellstartEintrag entry, double size = 30)
     {
-        var bitmap = TryGetIcon(entry);
-        if (bitmap != null)
-        {
-            var image = new Image { Source = bitmap, Width = size, Height = size };
-            RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
-            return image;
-        }
-
-        return new Border
+        var letter = new Border
         {
             Width = size,
             Height = size,
@@ -205,45 +197,20 @@ public sealed class AppsModule : IslandModule
                 VerticalAlignment = VerticalAlignment.Center,
             },
         }.Themed(Border.BackgroundProperty, "IslandChip");
-    }
 
-    /// <summary>Sucht das passende Symbol (eigene .exe, Ordner, System-Programm oder installierte App).</summary>
-    private static BitmapSource? TryGetIcon(SchnellstartEintrag entry)
-    {
-        var candidate = Environment.ExpandEnvironmentVariables(
-            string.IsNullOrWhiteSpace(entry.Icon) ? entry.Ziel : entry.Icon!).Trim('"');
-        if (IconCache.TryGetValue(candidate, out var cached)) return cached;
+        var image = new Image { Width = size, Height = size };
+        RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
+        var grid = new Grid { Width = size, Height = size };
+        grid.Children.Add(letter);
+        grid.Children.Add(image);
 
-        BitmapSource? result = null;
-        try
+        void Apply(ImageSource src)
         {
-            if (File.Exists(candidate) || Directory.Exists(candidate))
-                result = Native.GetIcon(candidate);
-            else if (!candidate.Contains('\\') && candidate.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-            {
-                foreach (var dir in new[] { Environment.SystemDirectory, Environment.GetFolderPath(Environment.SpecialFolder.Windows) })
-                {
-                    var path = Path.Combine(dir, candidate);
-                    if (File.Exists(path)) { result = Native.GetIcon(path); break; }
-                }
-
-                // Installierte Programme wie chrome.exe stehen unter "App Paths"
-                if (result == null)
-                {
-                    const string appPaths = @"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\";
-                    using var key = Registry.CurrentUser.OpenSubKey(appPaths + candidate)
-                                 ?? Registry.LocalMachine.OpenSubKey(appPaths + candidate);
-                    if (key?.GetValue(null) is string registered)
-                    {
-                        registered = Environment.ExpandEnvironmentVariables(registered.Trim('"'));
-                        if (File.Exists(registered)) result = Native.GetIcon(registered);
-                    }
-                }
-            }
+            image.Source = src;
+            letter.Visibility = Visibility.Collapsed;
         }
-        catch (Exception ex) { App.Log(ex); }
-
-        IconCache[candidate] = result;
-        return result;
+        var icon = AppIcons.Get(entry.Ziel, entry.Icon, entry.Name, Apply);
+        if (icon != null) Apply(icon);
+        return grid;
     }
 }

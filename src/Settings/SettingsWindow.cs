@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -91,7 +92,6 @@ public sealed class SettingsWindow : Window
     private bool _appPickerOpen;
     private string _appSearch = "";
     private static List<(string Name, string Path)>? _installedApps;
-    private static readonly Dictionary<string, ImageSource?> IconCache = new(StringComparer.OrdinalIgnoreCase);
 
     // Tastenkürzel aufnehmen
     private TextBox? _recordBox;
@@ -1064,7 +1064,8 @@ public sealed class SettingsWindow : Window
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-            var icon = new Image { Width = 24, Height = 24, VerticalAlignment = VerticalAlignment.Center, Source = AppIcon(item.Icon ?? item.Ziel) };
+            var icon = new Image { Width = 24, Height = 24, VerticalAlignment = VerticalAlignment.Center };
+            icon.Source = AppIcons.Get(item.Ziel, item.Icon, item.Name, src => icon.Source = src);
             var name = Box(item.Name, v => { item.Name = v; _s.NotifyChangedSoon(); });
             var target = Box(item.Ziel, v => { item.Ziel = v; _s.NotifyChangedSoon(); });
             target.Margin = new Thickness(8, 0, 4, 0);
@@ -1166,6 +1167,19 @@ public sealed class SettingsWindow : Window
     {
         var apps = InstalledApps();
         var panel = new StackPanel { Margin = new Thickness(14, 12, 14, 12) };
+        // Store-Apps (z. B. Spotify, WhatsApp aus dem Microsoft Store) laden im Hintergrund nach
+        if (_storeApps == null)
+        {
+            _ = Task.Run(async () =>
+            {
+                var store = await AppIcons.StoreAppsAsync();
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    _storeApps = store.Select(a => (a.Name, a.Target)).ToList();
+                    if (_appPickerOpen && _currentPage == "Apps") RebuildPage();
+                });
+            });
+        }
         panel.Children.Add(new TextBlock { Text = "Suchen …", FontSize = 11.5, Margin = new Thickness(2, 0, 0, 4) }.Themed(TextBlock.ForegroundProperty, "S.Sub"));
         var search = new TextBox { Text = _appSearch }.Themed(StyleProperty, "DarkBox");
         panel.Children.Add(search);
@@ -1195,7 +1209,8 @@ public sealed class SettingsWindow : Window
                 list.Children.Add(AppPickerRow(name, path));
                 if (++shown >= 200) break;
             }
-            if (shown == 0) list.Children.Add(Info(apps.Count == 0 ? "Keine Programme im Startmenü gefunden." : "Nichts gefunden."));
+            if (shown == 0) list.Children.Add(Info(apps.Count == 0 ? "Keine Programme gefunden." : "Nichts gefunden."));
+            if (_storeApps == null) list.Children.Add(Info("Store-Apps werden geladen …"));
         }
 
         search.TextChanged += (_, _) => { _appSearch = search.Text; Fill(); };
@@ -1213,7 +1228,7 @@ public sealed class SettingsWindow : Window
 
         var icon = new Image { Width = 24, Height = 24, VerticalAlignment = VerticalAlignment.Center };
         // Symbole erst nach dem Anzeigen laden → Liste erscheint sofort
-        Dispatcher.InvokeAsync(() => icon.Source = AppIcon(path), DispatcherPriority.Background);
+        Dispatcher.InvokeAsync(() => icon.Source ??= AppIcons.Get(path, null, name, src => icon.Source = src), DispatcherPriority.Background);
         var text = new TextBlock { Text = name, FontSize = 13.5, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
         var state = new TextBlock
         {
@@ -1242,7 +1257,21 @@ public sealed class SettingsWindow : Window
     }
 
     /// <summary>Alle Verknüpfungen aus dem Startmenü (für dich und für alle Benutzer).</summary>
+    private static List<(string Name, string Path)>? _storeApps;
+
+    /// <summary>Verknüpfungen aus dem Startmenü + Microsoft-Store-Apps (sobald geladen), ohne Doppelte.</summary>
     private static List<(string Name, string Path)> InstalledApps()
+    {
+        var all = LinkApps().ToList();
+        if (_storeApps != null)
+        {
+            var names = new HashSet<string>(all.Select(a => a.Name), StringComparer.OrdinalIgnoreCase);
+            all.AddRange(_storeApps.Where(a => names.Add(a.Name)));
+        }
+        return all.OrderBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+    }
+
+    private static List<(string Name, string Path)> LinkApps()
     {
         if (_installedApps != null) return _installedApps;
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -1271,17 +1300,6 @@ public sealed class SettingsWindow : Window
         return _installedApps;
     }
 
-    private static ImageSource? AppIcon(string? target)
-    {
-        if (string.IsNullOrWhiteSpace(target)) return null;
-        var path = Environment.ExpandEnvironmentVariables(target).Trim('"');
-        if (IconCache.TryGetValue(path, out var cached)) return cached;
-        ImageSource? icon = null;
-        try { if (File.Exists(path) || Directory.Exists(path)) icon = Native.GetIcon(path); }
-        catch (Exception ex) { App.Log(ex); }
-        IconCache[path] = icon;
-        return icon;
-    }
 
     private void BuildKeys(StackPanel p)
     {
