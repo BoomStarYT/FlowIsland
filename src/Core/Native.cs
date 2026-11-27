@@ -258,6 +258,84 @@ internal static class Native
             && r.Right >= mi.rcMonitor.Right && r.Bottom >= mi.rcMonitor.Bottom;
     }
 
+    // ------------------------------------------------------------------ Grosse, scharfe Symbole (ohne Verknüpfungspfeil)
+
+    [ComImport, Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IShellItemImageFactory
+    {
+        [PreserveSig] int GetImage(SIZE size, int flags, out IntPtr phbm);
+    }
+
+    [StructLayout(LayoutKind.Sequential)] private struct SIZE { public int cx, cy; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BITMAP { public int bmType, bmWidth, bmHeight, bmWidthBytes; public ushort bmPlanes, bmBitsPixel; public IntPtr bmBits; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BITMAPINFOHEADER
+    {
+        public uint biSize; public int biWidth, biHeight; public ushort biPlanes, biBitCount;
+        public uint biCompression, biSizeImage; public int biXPelsPerMeter, biYPelsPerMeter; public uint biClrUsed, biClrImportant;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct DIBSECTION { public BITMAP dsBm; public BITMAPINFOHEADER dsBmih; public uint b0, b1, b2; public IntPtr dshSection; public uint dsOffset; }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern int SHCreateItemFromParsingName(string path, IntPtr pbc, ref Guid riid, [MarshalAs(UnmanagedType.Interface)] out IShellItemImageFactory? item);
+
+    [DllImport("gdi32.dll", EntryPoint = "GetObjectW")] private static extern int GetObject(IntPtr h, int size, out DIBSECTION ds);
+
+    /// <summary>
+    /// Symbol in hoher Auflösung über die Windows-Shell – klappt für Dateien, Ordner, Verknüpfungen (ohne Pfeil)
+    /// und Store-Apps ("shell:AppsFolder\..."). null, wenn es nicht geht.
+    /// </summary>
+    public static BitmapSource? GetShellImage(string parsingName, int size)
+    {
+        IShellItemImageFactory? factory = null;
+        try
+        {
+            var iid = typeof(IShellItemImageFactory).GUID;
+            if (SHCreateItemFromParsingName(parsingName, IntPtr.Zero, ref iid, out factory) != 0 || factory == null) return null;
+            if (factory.GetImage(new SIZE { cx = size, cy = size }, 0x1 /* BIGGERSIZEOK */ | 0x4 /* ICONONLY */, out var hbm) != 0 || hbm == IntPtr.Zero) return null;
+            try
+            {
+                if (GetObject(hbm, Marshal.SizeOf<DIBSECTION>(), out var ds) == 0 || ds.dsBm.bmBits == IntPtr.Zero || ds.dsBm.bmBitsPixel != 32)
+                {
+                    var fallback = Imaging.CreateBitmapSourceFromHBitmap(hbm, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+                    fallback.Freeze();
+                    return fallback;
+                }
+                int w = ds.dsBm.bmWidth, h = ds.dsBm.bmHeight, stride = ds.dsBm.bmWidthBytes;
+                var buf = new byte[stride * h];
+                Marshal.Copy(ds.dsBm.bmBits, buf, 0, buf.Length);
+
+                // DIBs liegen oft "auf dem Kopf" (unterste Zeile zuerst)
+                if (ds.dsBmih.biHeight > 0)
+                {
+                    var row = new byte[stride];
+                    for (int y = 0; y < h / 2; y++)
+                    {
+                        Buffer.BlockCopy(buf, y * stride, row, 0, stride);
+                        Buffer.BlockCopy(buf, (h - 1 - y) * stride, buf, y * stride, stride);
+                        Buffer.BlockCopy(row, 0, buf, (h - 1 - y) * stride, stride);
+                    }
+                }
+                // Ohne Alpha-Kanal → alles deckend
+                var anyAlpha = false;
+                for (int i = 3; i < buf.Length; i += 4) if (buf[i] != 0) { anyAlpha = true; break; }
+                if (!anyAlpha) for (int i = 3; i < buf.Length; i += 4) buf[i] = 255;
+
+                var bmp = BitmapSource.Create(w, h, 96, 96, System.Windows.Media.PixelFormats.Pbgra32, null, buf, stride);
+                bmp.Freeze();
+                return bmp;
+            }
+            finally { DeleteObject(hbm); }
+        }
+        catch { return null; }
+        finally { if (factory != null) Marshal.ReleaseComObject(factory); }
+    }
+
     /// <summary>Holt das Symbol einer Datei / eines Ordners / einer .exe.</summary>
     public static BitmapSource? GetIcon(string path)
     {

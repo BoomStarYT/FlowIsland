@@ -134,13 +134,13 @@ public sealed class AppsModule : IslandModule
         var grid = new UniformGrid { Rows = 2, Columns = 2, Width = 26, Height = 26 };
         foreach (var app in apps.Take(4))
         {
-            var mini = AppIcon(app, 11);
+            var mini = AppIcon(app, 11.5);
             mini.Margin = new Thickness(0.5);
             grid.Children.Add(mini);
         }
         var box = new Border
         {
-            Width = 34, Height = 34, CornerRadius = new CornerRadius(10), Padding = new Thickness(4), Child = grid,
+            Width = 36, Height = 36, CornerRadius = new CornerRadius(10), Padding = new Thickness(5), Child = grid,
         }.Themed(Border.BackgroundProperty, "IslandChip");
 
         var button = Tile(box, folder);
@@ -153,7 +153,7 @@ public sealed class AppsModule : IslandModule
     {
         var plus = new Border
         {
-            Width = 30, Height = 30, CornerRadius = new CornerRadius(9), BorderThickness = new Thickness(1.2),
+            Width = 36, Height = 36, CornerRadius = new CornerRadius(10), BorderThickness = new Thickness(1.2),
             Child = new TextBlock { Text = "", FontFamily = Ui.IconFont, FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
                 .Themed(TextBlock.ForegroundProperty, "IslandSubText"),
         }.Themed(Border.BorderBrushProperty, "IslandTrack");
@@ -180,37 +180,12 @@ public sealed class AppsModule : IslandModule
         return new Button { Content = content, Style = Ui.Style("TileButton") };
     }
 
-    /// <summary>Symbol der App. Erst ein Buchstabe, sobald das echte Symbol da ist (auch Store-Apps) → Symbol.</summary>
-    private static FrameworkElement AppIcon(SchnellstartEintrag entry, double size = 30)
+    /// <summary>Symbol der App als Glas-Kachel. Erst ein Buchstabe, sobald das echte Symbol da ist → Symbol.</summary>
+    private static FrameworkElement AppIcon(SchnellstartEintrag entry, double size = 36)
     {
-        var letter = new Border
-        {
-            Width = size,
-            Height = size,
-            CornerRadius = new CornerRadius(size * 0.3),
-            Child = new TextBlock
-            {
-                Text = entry.Name.Length > 0 ? entry.Name[..1].ToUpperInvariant() : "?",
-                FontWeight = FontWeights.SemiBold,
-                FontSize = size * 0.47,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-            },
-        }.Themed(Border.BackgroundProperty, "IslandChip");
-
-        var image = new Image { Width = size, Height = size };
-        RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
-        var grid = new Grid { Width = size, Height = size };
-        grid.Children.Add(letter);
-        grid.Children.Add(image);
-
-        void Apply(ImageSource src)
-        {
-            image.Source = src;
-            letter.Visibility = Visibility.Collapsed;
-        }
-        var icon = AppIcons.Get(entry.Ziel, entry.Icon, entry.Name, Apply);
-        if (icon != null) Apply(icon);
-        return grid;
+        var tile = new GlassIcon(size, entry.Name.Length > 0 ? entry.Name[..1].ToUpperInvariant() : "?");
+        var icon = AppIcons.Get(entry.Ziel, entry.Icon, entry.Name, src => tile.Source = src);
+        if (icon != null) tile.Source = icon;
+        return tile;
     }
 }

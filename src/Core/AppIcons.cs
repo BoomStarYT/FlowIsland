@@ -63,10 +63,13 @@ public static class AppIcons
 
         // 1) Normale Dateien, Ordner, Programme
         var file = FileIcon(string.IsNullOrWhiteSpace(iconHint) ? target : iconHint!) ?? (iconHint != null ? FileIcon(target) : null);
+        if (file == null && target.StartsWith("shell:AppsFolder\\", StringComparison.OrdinalIgnoreCase))
+            file = Native.GetShellImage(target, 96);
         if (file != null)
         {
-            Cache[key] = file;
-            return file;
+            var prepared = Prepare(file);
+            Cache[key] = prepared;
+            return prepared;
         }
 
         // 2) Store-App (shell:AppsFolder\...) oder per Name finden (z. B. "spotify:" → Spotify aus dem Store)
@@ -98,7 +101,12 @@ public static class AppIcons
                 app = apps.FirstOrDefault(a => a.Name.Contains(scheme, StringComparison.OrdinalIgnoreCase)
                                             || a.Aumid.Contains(scheme, StringComparison.OrdinalIgnoreCase));
             }
-            if (app != null) icon = await LogoAsync(app.Entry);
+            if (app != null)
+            {
+                // Erst das Shell-Symbol (durchsichtig, wie im Startmenü), sonst das Logo der App
+                var shell = Native.GetShellImage(app.Target, 96);
+                icon = shell != null ? Prepare(shell) : await LogoAsync(app.Entry) is BitmapSource logo ? Prepare(logo) : null;
+            }
         }
         catch (Exception ex) { App.Log(ex); }
 
@@ -132,6 +140,56 @@ public static class AppIcons
         catch { return null; }
     }
 
+    // ================================================================== Aufbereiten
+
+    /// <summary>Symbole, die schon selbst eine volle Fläche haben (z. B. Spotify-Grün) → füllen die ganze Kachel.</summary>
+    private static readonly HashSet<ImageSource> FullBleed = new();
+
+    public static bool IsFullBleed(ImageSource? src) => src != null && FullBleed.Contains(src);
+
+    /// <summary>
+    /// Durchsichtigen Rand wegschneiden, damit jedes Symbol gleich gross wirkt (manche haben viel leeren Rand).
+    /// Merkt sich ausserdem, ob das Symbol eine volle, deckende Fläche ist.
+    /// </summary>
+    private static ImageSource Prepare(BitmapSource source)
+    {
+        try
+        {
+            var bgra = new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+            int w = bgra.PixelWidth, h = bgra.PixelHeight, stride = w * 4;
+            var px = new byte[stride * h];
+            bgra.CopyPixels(px, stride, 0);
+
+            int minX = w, minY = h, maxX = -1, maxY = -1, solid = 0;
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    var a = px[y * stride + x * 4 + 3];
+                    if (a <= 24) continue;
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                    if (y < minY) minY = y;
+                    if (y > maxY) maxY = y;
+                    if (a > 200) solid++;
+                }
+            if (maxX < minX || maxY < minY) return source;
+
+            // Quadratisch zuschneiden (Mitte bleibt Mitte)
+            int bw = maxX - minX + 1, bh = maxY - minY + 1, side = Math.Max(bw, bh);
+            int cx = minX + bw / 2, cy = minY + bh / 2;
+            int left = Math.Clamp(cx - side / 2, 0, Math.Max(0, w - side)), top = Math.Clamp(cy - side / 2, 0, Math.Max(0, h - side));
+            side = Math.Min(side, Math.Min(w - left, h - top));
+
+            BitmapSource result = side < Math.Min(w, h) - 2
+                ? new CroppedBitmap(source, new System.Windows.Int32Rect(left, top, side, side))
+                : source;
+            result.Freeze();
+            if (solid > bw * bh * 0.82) FullBleed.Add(result);
+            return result;
+        }
+        catch { return source; }
+    }
+
     /// <summary>Symbol einer Datei / eines Ordners / einer .exe (auch System-Programme und "App Paths").</summary>
     public static BitmapSource? FileIcon(string? raw)
     {
@@ -140,14 +198,14 @@ public static class AppIcons
         {
             var candidate = Environment.ExpandEnvironmentVariables(raw).Trim('"');
             if (candidate.StartsWith("shell:", StringComparison.OrdinalIgnoreCase)) return null;
-            if (File.Exists(candidate) || Directory.Exists(candidate)) return Native.GetIcon(candidate);
+            if (File.Exists(candidate) || Directory.Exists(candidate)) return Native.GetShellImage(candidate, 96) ?? Native.GetIcon(candidate);
 
             if (!candidate.Contains('\\') && candidate.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
             {
                 foreach (var dir in new[] { Environment.SystemDirectory, Environment.GetFolderPath(Environment.SpecialFolder.Windows) })
                 {
                     var path = Path.Combine(dir, candidate);
-                    if (File.Exists(path)) return Native.GetIcon(path);
+                    if (File.Exists(path)) return Native.GetShellImage(path, 96) ?? Native.GetIcon(path);
                 }
 
                 const string appPaths = @"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\";
@@ -156,7 +214,7 @@ public static class AppIcons
                 if (key?.GetValue(null) is string registered)
                 {
                     registered = Environment.ExpandEnvironmentVariables(registered.Trim('"'));
-                    if (File.Exists(registered)) return Native.GetIcon(registered);
+                    if (File.Exists(registered)) return Native.GetShellImage(registered, 96) ?? Native.GetIcon(registered);
                 }
             }
         }
