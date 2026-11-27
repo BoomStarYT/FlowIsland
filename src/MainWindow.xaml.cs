@@ -59,7 +59,7 @@ public partial class MainWindow : Window, IIslandHost
     private VerticalAlignment _alignV = VerticalAlignment.Top;
     private IntPtr _hwnd;
     private bool _blurOn;
-    private Rect _lastRegion = Rect.Empty;
+    private GlassBackdrop? _glass;
 
     /// <summary>RAM-Begrenzer (wird in den Einstellungen bedient).</summary>
     public RamLimiter Ram { get; }
@@ -149,6 +149,7 @@ public partial class MainWindow : Window, IIslandHost
             if (RestMode == "Offen") Dispatcher.InvokeAsync(() => Expand(), DispatcherPriority.Background);
         };
         Theme.CoverChanged += OnCoverChanged;
+        IsVisibleChanged += (_, _) => UpdateBlur();
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
         Closed += OnClosed;
         _settings.Changed += OnSettingsChanged;
@@ -673,6 +674,7 @@ public partial class MainWindow : Window, IIslandHost
     private void StartDrag(Point cursorInWindow)
     {
         _isDragging = true;
+        UpdateBlur();
         _expandTimer.Stop();
         _collapseTimer.Stop();
 
@@ -705,6 +707,7 @@ public partial class MainWindow : Window, IIslandHost
     private void FinishMove()
     {
         _isDragging = false;
+        UpdateBlur();
         if (Tucked) return;
         RefreshCompact();
         if (RestMode == "Offen") Expand();
@@ -1060,7 +1063,6 @@ public partial class MainWindow : Window, IIslandHost
         PillRim.CornerRadius = cr;
         Shadow1.CornerRadius = Grow(cr, 1.5);
         Shadow2.CornerRadius = Grow(cr, 3);
-        _lastRegion = Rect.Empty;
         UpdateRegion();
     }
 
@@ -1114,45 +1116,70 @@ public partial class MainWindow : Window, IIslandHost
     // ================================================================== Echter Glas-Blur
 
     /// <summary>
-    /// Bei Glas: Windows macht hinter der Insel alles unscharf. Damit das nur hinter der Insel passiert
-    /// (und nicht im ganzen Fenster), bekommt das Fenster genau die Form der Insel – auch während Animationen.
+    /// Bei Glas: Ein eigenes kleines Glas-Fenster mit genau der Form der Insel liegt direkt dahinter
+    /// und zeigt den Windows-Blur. Es folgt der Insel bei jeder Animation.
+    /// Während dem Ziehen ist es kurz aus (sonst würde es hinterherhinken).
     /// </summary>
     private void UpdateBlur()
     {
         if (_hwnd == IntPtr.Zero) return;
-        var want = Theme.BlurWanted(_settings) && !Tucked && !_hiddenForFullscreen;
-        if (want == _blurOn) { if (want) UpdateRegion(); return; }
-        _blurOn = want;
+        var want = Theme.BlurWanted(_settings) && !Tucked && !_hiddenForFullscreen && !_isDragging && IsVisible;
         if (want)
         {
-            Pill.LayoutUpdated += OnPillLayout;
+            if (_glass == null)
+            {
+                try
+                {
+                    _glass = new GlassBackdrop();
+                    _glass.Own(_hwnd);
+                }
+                catch (Exception ex)
+                {
+                    App.Log(ex);
+                    _glass = null;
+                    return;
+                }
+            }
+            if (!_blurOn)
+            {
+                _blurOn = true;
+                Pill.LayoutUpdated += OnPillLayout;
+                LocationChanged += OnPillLayout;
+            }
             UpdateRegion();
-            Native.SetBlur(_hwnd, true);
+            _glass.Show();
         }
         else
         {
-            Pill.LayoutUpdated -= OnPillLayout;
-            Native.SetBlur(_hwnd, false);
-            Native.ClearRegion(_hwnd);
-            _lastRegion = Rect.Empty;
+            if (_blurOn)
+            {
+                _blurOn = false;
+                Pill.LayoutUpdated -= OnPillLayout;
+                LocationChanged -= OnPillLayout;
+            }
+            _glass?.Hide();
         }
     }
 
     private void OnPillLayout(object? sender, EventArgs e) => UpdateRegion();
 
+    /// <summary>Glas-Fenster genau unter die Insel legen (Bildschirm-Pixel).</summary>
     private void UpdateRegion()
     {
-        if (!_blurOn || !Pill.IsLoaded) return;
-        Rect r;
-        try { r = Pill.TransformToAncestor(Root).TransformBounds(new Rect(Pill.RenderSize)); }
+        if (!_blurOn || _glass == null || !Pill.IsLoaded || PresentationSource.FromVisual(Pill) == null) return;
+        Point a, b;
+        try
+        {
+            a = Pill.PointToScreen(new Point(0, 0));
+            b = Pill.PointToScreen(new Point(Pill.ActualWidth, Pill.ActualHeight));
+        }
         catch { return; }
         var d = DeviceScale();
-        var px = new Rect(Math.Round(r.X * d), Math.Round(r.Y * d), Math.Round(r.Width * d), Math.Round(r.Height * d));
-        if (px == _lastRegion) return;
-        _lastRegion = px;
         var cr = PillBg.CornerRadius;
         var radius = Math.Max(Math.Max(cr.TopLeft, cr.TopRight), Math.Max(cr.BottomLeft, cr.BottomRight)) * Scale * d;
-        Native.SetRoundRegion(_hwnd, (int)px.Left, (int)px.Top, (int)px.Right, (int)px.Bottom, (int)Math.Round(radius * 2), Edge);
+        int x = (int)Math.Round(Math.Min(a.X, b.X)), y = (int)Math.Round(Math.Min(a.Y, b.Y));
+        int w = (int)Math.Round(Math.Abs(b.X - a.X)), h = (int)Math.Round(Math.Abs(b.Y - a.Y));
+        _glass.Place(x, y, w, h, (int)Math.Round(radius * 2), Edge);
     }
 
     // ================================================================== Wischen (Touchpad) = Tab wechseln
@@ -1361,6 +1388,7 @@ public partial class MainWindow : Window, IIslandHost
         _cacheTimer.Stop();
         _alertTimer.Stop();
         Theme.CoverChanged -= OnCoverChanged;
+        _glass?.Dispose();
         _settings.Changed -= OnSettingsChanged;
         _settings.Save();
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
