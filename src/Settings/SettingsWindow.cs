@@ -197,13 +197,25 @@ public sealed class SettingsWindow : Window
         layout.Children.Add(side);
         layout.Children.Add(content);
 
-        Content = new Border
+        var frame = new Border
         {
             CornerRadius = new CornerRadius(14),
             BorderThickness = new Thickness(1),
             BorderBrush = Ui.Brush("#FF3A3A3C"),
             Child = layout,
+            Opacity = 0,
+            RenderTransformOrigin = new Point(0.5, 0.5),
+            RenderTransform = new ScaleTransform(0.96, 0.96),
         }.Themed(Border.BackgroundProperty, "S.Bg");
+        Content = frame;
+        // Weich aufgehen wie bei macOS
+        Loaded += (_, _) =>
+        {
+            frame.CacheMode = new BitmapCache();
+            Anim.To(frame, OpacityProperty, 1, 180, Anim.Smooth);
+            Anim.To((ScaleTransform)frame.RenderTransform, ScaleTransform.ScaleXProperty, 1, 380, Anim.Spring);
+            Anim.To((ScaleTransform)frame.RenderTransform, ScaleTransform.ScaleYProperty, 1, 380, Anim.Spring, () => frame.CacheMode = null);
+        };
 
         KeyDown += (_, e) => { if (e.Key == Key.Escape) Close(); };
         Closing += (_, _) =>
@@ -288,6 +300,14 @@ public sealed class SettingsWindow : Window
         catch (Exception ex) { App.Log(ex); }
 
         _page.Content = panel;
+        if (!keepScroll)
+        {
+            // Neue Seite gleitet sanft rein
+            var slide = new TranslateTransform();
+            panel.RenderTransform = slide;
+            Anim.To(slide, TranslateTransform.YProperty, 0, 340, Anim.Spring, from: 14);
+            Anim.To(panel, OpacityProperty, 1, 200, Anim.Smooth, from: 0);
+        }
 
         if (keepScroll)
         {
@@ -807,8 +827,10 @@ public sealed class SettingsWindow : Window
         // Zuerst die gewählten (in ihrer Reihenfolge), dann der Rest
         var ordered = chosen.Where(id => Island.Modules.ControlModule.Actions.Any(a => a.Id == id))
             .Concat(Island.Modules.ControlModule.Actions.Select(a => a.Id).Where(id => !chosen.Contains(id))).ToList();
+        var hidden = ordered.Count(id => !chosen.Contains(id));
         foreach (var id in ordered)
         {
+            if (!_showAllControls && !chosen.Contains(id)) continue;
             var action = Island.Modules.ControlModule.Actions.First(a => a.Id == id);
             var on = chosen.Contains(id);
             var g = new Grid { Margin = new Thickness(12, 6, 8, 6) };
@@ -848,6 +870,14 @@ public sealed class SettingsWindow : Window
             Grid.SetColumn(toggle, 4);
             g.Children.Add(toggle);
             ccRows.Add(g);
+        }
+        if (hidden > 0)
+        {
+            var more = IconTextBtn(_showAllControls ? "\uE70E" : "\uE710", _showAllControls ? "Nur aktive zeigen" : $"Weitere Knöpfe hinzufügen ({hidden})", "Secondary",
+                () => { _showAllControls = !_showAllControls; RebuildPage(); });
+            more.HorizontalAlignment = HorizontalAlignment.Left;
+            more.Margin = new Thickness(14, 10, 0, 10);
+            ccRows.Add(more);
         }
         ccRows.Add(Info($"Bis zu {Island.Modules.ControlModule.MaxButtons} Knöpfe. Tipp: Rechtsklick auf einen Knopf in der Insel öffnet die passende Windows-Einstellung."));
         p.Children.Add(Card(ccRows.ToArray()));
@@ -941,6 +971,7 @@ public sealed class SettingsWindow : Window
         var clear = Btn("Erledigte löschen", "Secondary", () => { _s.Aufgaben.RemoveAll(a => a.Erledigt); _s.NotifyChanged(); RebuildPage(); });
         clear.Margin = new Thickness(8, 0, 0, 0);
         buttons.Children.Add(clear);
+        buttons.Margin = new Thickness(0, 0, 0, 8);
         p.Children.Add(buttons);
 
         p.Children.Add(SectionTitle("Erinnerung"));
@@ -966,11 +997,11 @@ public sealed class SettingsWindow : Window
         // ---------- Schnell hinzufügen
         p.Children.Add(SectionTitle("Schnell hinzufügen"));
         var quick = new WrapPanel();
-        var pick = Btn(_appPickerOpen ? "Liste schliessen" : "Aus installierten Apps wählen", "Primary", () =>
+        var pick = Spaced(Btn(_appPickerOpen ? "Liste schliessen" : "Aus installierten Apps wählen", "Primary", () =>
         {
             _appPickerOpen = !_appPickerOpen;
             RebuildPage();
-        });
+        }));
         quick.Children.Add(pick);
         quick.Children.Add(Spaced(Btn("+ Programm (.exe)", "Secondary", () =>
         {
@@ -1127,7 +1158,7 @@ public sealed class SettingsWindow : Window
         p.Children.Add(Card(rows.ToArray()));
     }
 
-    private bool _showAllPresets, _showAllProgress;
+    private bool _showAllPresets, _showAllProgress, _showAllControls;
 
     /// <summary>"Mehr anzeigen" / "Weniger anzeigen".</summary>
     private static FrameworkElement MoreButton(bool showingAll, int total, Action toggle, string what = "Vorlagen")
@@ -1158,7 +1189,8 @@ public sealed class SettingsWindow : Window
 
     private static Button Spaced(Button b)
     {
-        b.Margin = new Thickness(8, 0, 0, 8);
+        b.Margin = new Thickness(0, 0, 8, 8);
+        b.Height = 36;
         return b;
     }
 
@@ -1529,12 +1561,25 @@ public sealed class SettingsWindow : Window
         Margin = new Thickness(14, 0, 0, 6),
     }.Themed(TextBlock.ForegroundProperty, "S.Sub");
 
+    private const string FontDivider = "──────────  Alle Schriften  ──────────";
+
+    /// <summary>Beliebte, ästhetische Schriften (werden oben angeheftet, falls installiert).</summary>
+    private static readonly string[] FavoriteFonts =
+    {
+        "Segoe UI Variable Text", "Segoe UI Variable Display", "Inter", "SF Pro Display", "Poppins", "Montserrat",
+        "Aptos", "Aptos Display", "Bahnschrift", "Century Gothic", "Gill Sans MT", "Futura", "Avenir Next",
+        "Helvetica Neue", "Lato", "Nunito", "Quicksand", "Raleway", "Roboto", "Open Sans", "Calibri", "Corbel",
+        "Candara", "Trebuchet MS", "Georgia", "Palatino Linotype", "Garamond", "Sitka Text", "Constantia",
+        "Cascadia Code", "Consolas", "JetBrains Mono", "Ink Free", "Segoe Print",
+    };
+
     private static TextBlock Info(string text) => new TextBlock
     {
         Text = text,
         FontSize = 12,
         TextWrapping = TextWrapping.Wrap,
-        Margin = new Thickness(14, 10, 14, 12),
+        Margin = new Thickness(16, 14, 16, 14),
+        LineHeight = 17,
     }.Themed(TextBlock.ForegroundProperty, "S.Sub");
 
     private static Border Card(params UIElement[] rows)
@@ -1796,7 +1841,10 @@ public sealed class SettingsWindow : Window
 
     private FrameworkElement FontPicker()
     {
-        var names = Fonts.SystemFontFamilies.Select(f => f.Source).Distinct().OrderBy(n => n).ToList();
+        // Schöne, bekannte Schriften oben (nur die, die installiert sind), dann alle anderen
+        var installed = Fonts.SystemFontFamilies.Select(f => f.Source).Distinct().OrderBy(n => n).ToList();
+        var pinned = FavoriteFonts.Where(f => installed.Contains(f, StringComparer.OrdinalIgnoreCase)).ToList();
+        var names = pinned.Concat(new[] { FontDivider }).Concat(installed.Except(pinned, StringComparer.OrdinalIgnoreCase)).ToList();
         var view = CollectionViewSource.GetDefaultView(names);
 
         var search = new TextBox { Margin = new Thickness(0, 0, 0, 8) }.Themed(StyleProperty, "DarkBox");
@@ -1814,6 +1862,7 @@ public sealed class SettingsWindow : Window
         list.SelectionChanged += (_, _) =>
         {
             if (list.SelectedItem is not string name || name == _s.Schriftart) return;
+            if (name == FontDivider) { list.SelectedItem = _s.Schriftart; return; }
             _s.Schriftart = name;
             _s.NotifyChanged();
         };

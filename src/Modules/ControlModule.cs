@@ -52,7 +52,8 @@ public sealed class ControlModule : IslandModule
         _root.MouseWheel += (_, e) =>
         {
             if (_brightness != null && _brightness.IsMouseOver) return;
-            var v = Math.Clamp((AudioControl.Volume ?? 0) + (e.Delta > 0 ? 0.04 : -0.04), 0, 1);
+            // Proportional zum Mausrad/Touchpad (eine Raste = 2 %) – Touchpads senden viele kleine Schritte
+            var v = Math.Clamp((AudioControl.Volume ?? 0) + e.Delta / 120.0 * 0.02, 0, 1);
             AudioControl.Volume = v;
             if (_volume != null) _volume.Value = v;
             RefreshAudio();
@@ -344,7 +345,7 @@ public sealed class PillSlider : Border
         LostMouseCapture += (_, _) => Dragging = false;
         MouseWheel += (_, e) =>
         {
-            Value = Math.Clamp(_value + (e.Delta > 0 ? 0.05 : -0.05), 0, 1);
+            Value = Math.Clamp(_value + e.Delta / 120.0 * 0.03, 0, 1);
             ValueChanged?.Invoke(_value);
             e.Handled = true;
         };

@@ -82,17 +82,21 @@ public sealed class WeatherModule : IslandModule
         top.Children.Add(new WeatherIcon(38) { Code = data.Code, IsDay = data.IsDay, VerticalAlignment = VerticalAlignment.Center });
         top.Children.Add(new TextBlock
         {
-            Text = $"{Math.Round(data.Temp):0}°", FontSize = 36, FontWeight = FontWeights.Light,
+            Text = $"{T(data.Temp)}°", FontSize = 36, FontWeight = FontWeights.Light,
             Margin = new Thickness(8, -4, 0, 0), VerticalAlignment = VerticalAlignment.Center,
         });
         now.Children.Add(top);
         now.Children.Add(new TextBlock { Text = WeatherService.Describe(data.Code), FontSize = 13, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 2, 0, 0) });
         var today = data.Days.FirstOrDefault();
-        var detail = today != null ? $"H {Math.Round(today.Max):0}°  T {Math.Round(today.Min):0}°" : $"Gefühlt {Math.Round(data.Feels):0}°";
+        var detail = today != null ? $"H {T(today.Max)}°  T {T(today.Min)}°" : $"Gefühlt {T(data.Feels)}°";
         now.Children.Add(new TextBlock { Text = detail, FontSize = 11.5 }.Themed(TextBlock.ForegroundProperty, "IslandSubText"));
         var place = string.IsNullOrWhiteSpace(s.WetterOrtName) ? s.WetterOrt : s.WetterOrtName.Split(',')[0];
-        now.Children.Add(new TextBlock { Text = " " + place, FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets, " + s.Schriftart), FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis }
+        var placeRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 1, 0, 0) };
+        placeRow.Children.Add(new TextBlock { Text = "\uE707", FontFamily = Ui.IconFont, FontSize = 10, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 1, 4, 0) }
             .Themed(TextBlock.ForegroundProperty, "IslandSubText"));
+        placeRow.Children.Add(new TextBlock { Text = place, FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 120, VerticalAlignment = VerticalAlignment.Center }
+            .Themed(TextBlock.ForegroundProperty, "IslandSubText"));
+        now.Children.Add(placeRow);
         _root.Children.Add(now);
 
         // ---------- Rechts: nächste Stunden + Tage
@@ -103,7 +107,7 @@ public sealed class WeatherModule : IslandModule
 
         var hours = new UniformGridLite(5);
         foreach (var h in data.Hours.Take(5))
-            hours.Add(Cell(h.Time.ToString("HH", German) + " Uhr", h.Code, h.IsDay, $"{Math.Round(h.Temp):0}°"));
+            hours.Add(Cell(h.Time.ToString("HH", German) + " Uhr", h.Code, h.IsDay, $"{T(h.Temp)}°"));
         right.Children.Add(hours.Panel);
 
         var line = new Border { Height = 1, Margin = new Thickness(4, 3, 4, 3) }.Themed(Border.BackgroundProperty, "IslandTrack");
@@ -135,10 +139,17 @@ public sealed class WeatherModule : IslandModule
         row.Children.Add(new TextBlock { Text = d.Date.ToString("ddd", German), FontSize = 11, Width = 24, VerticalAlignment = VerticalAlignment.Center }
             .Themed(TextBlock.ForegroundProperty, "IslandSubText"));
         row.Children.Add(new WeatherIcon(18) { Code = d.Code, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 4, 0) });
-        row.Children.Add(new TextBlock { Text = $"{Math.Round(d.Max):0}°", FontSize = 11.5, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
-        row.Children.Add(new TextBlock { Text = $" {Math.Round(d.Min):0}°", FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center }
+        row.Children.Add(new TextBlock { Text = $"{T(d.Max)}°", FontSize = 11.5, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
+        row.Children.Add(new TextBlock { Text = $" {T(d.Min)}°", FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center }
             .Themed(TextBlock.ForegroundProperty, "IslandSubText"));
         return row;
+    }
+
+    /// <summary>Temperatur ohne "-0".</summary>
+    private static string T(double v)
+    {
+        var r = (int)Math.Round(v, MidpointRounding.AwayFromZero);
+        return r.ToString(CultureInfo.InvariantCulture);
     }
 
     /// <summary>Einfache Zeile mit gleich breiten Spalten.</summary>

@@ -200,7 +200,7 @@ public sealed class ClockModule : IslandModule
                     _weatherIcon.Code = w.Code;
                     _weatherIcon.IsDay = w.IsDay;
                     _weatherIcon.Visibility = Visibility.Visible;
-                    _weatherText.Text = $"{Math.Round(w.Temp):0}°  " + now.ToString("HH:mm", German);
+                    _weatherText.Text = $"{(int)Math.Round(w.Temp, MidpointRounding.AwayFromZero)}°  " + now.ToString("HH:mm", German);
                 }
                 else
                 {
@@ -260,7 +260,7 @@ public sealed class ClockModule : IslandModule
             _mWeatherIcon.Visibility = Visibility.Visible;
             _mWeatherIcon.Code = w.Code;
             _mWeatherIcon.IsDay = w.IsDay;
-            _mWeather.Text = $"{Math.Round(w.Temp):0}° · {WeatherService.Describe(w.Code)}";
+            _mWeather.Text = $"{(int)Math.Round(w.Temp, MidpointRounding.AwayFromZero)}° · {WeatherService.Describe(w.Code)}";
         }
         else
         {
