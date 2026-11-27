@@ -79,6 +79,8 @@ public sealed class MediaModule : IslandModule
     private TimeSpan _start, _position, _duration;
     private DateTime _positionStampUtc = DateTime.UtcNow;
     private ImageBrush? _cover;
+    private ImageBrush? _coverGlass;   // farblos + durchsichtig für Glas-Stile
+    private BitmapSource? _coverBitmap;
     private string? _coverKey;
     private string? _songKey;
     private string _title = "", _artist = "", _album = "";
@@ -143,8 +145,16 @@ public sealed class MediaModule : IslandModule
         UpdateCompactTitle();
     }
 
+    private static readonly SolidColorBrush GlassEdge = Ui.Brush("#66FFFFFF");
+    private bool _lastGlassCover;
+
     private void ApplyLook()
     {
+        if (_lastGlassCover != GlassCover)
+        {
+            _lastGlassCover = GlassCover;
+            ApplyCover(animate: false);
+        }
         _eqCompact.Animated = Context.Settings.EqualizerAnimiert;
         _eqExpanded.Animated = Context.Settings.EqualizerAnimiert;
         _progress.StyleId = Context.Settings.Fortschritt;
@@ -301,9 +311,11 @@ public sealed class MediaModule : IslandModule
             var brush = await LoadCoverAsync(props.Thumbnail);
             if (!ReferenceEquals(session, _session)) return;
             _cover = brush;
+            _coverBitmap = brush?.ImageSource as BitmapSource;
+            _coverGlass = GlassVersion(_coverBitmap);
             _coverKey = brush != null ? key : null; // ohne Cover: beim nächsten Ereignis nochmal versuchen
             ApplyCover(animate: true);
-            Theme.SetCoverColor(CoverColors.Vibrant(brush?.ImageSource as BitmapSource));
+            Theme.SetCoverColor(CoverColors.Vibrant(_coverBitmap));
         }
 
         UpdatePlayState();
@@ -398,6 +410,8 @@ public sealed class MediaModule : IslandModule
         var hadMedia = _hasMedia;
         _hasMedia = false;
         _cover = null;
+        _coverGlass = null;
+        _coverBitmap = null;
         _coverKey = null;
         _songKey = null;
         _lyrics = null;
@@ -424,12 +438,38 @@ public sealed class MediaModule : IslandModule
         Context.RequestCompactRefresh();
     }
 
+    /// <summary>Glas-Look: Cover in Graustufen und halb durchsichtig – passt zum Glas.</summary>
+    private static ImageBrush? GlassVersion(BitmapSource? source)
+    {
+        if (source == null) return null;
+        try
+        {
+            var gray = new FormatConvertedBitmap(source, PixelFormats.Gray8, null, 0);
+            gray.Freeze();
+            var brush = new ImageBrush(gray) { Stretch = Stretch.UniformToFill, Opacity = 0.62 };
+            brush.Freeze();
+            return brush;
+        }
+        catch (Exception ex)
+        {
+            App.Log(ex);
+            return null;
+        }
+    }
+
+    private bool GlassCover => Context.Settings.CoverGlas && Theme.IsGlass(Context.Settings) && _coverGlass != null;
+
     private void ApplyCover(bool animate)
     {
+        var glass = GlassCover;
+        var brush = glass ? _coverGlass : _cover;
         foreach (var border in new[] { _view.CoverBorder, _compactCover, _mediumCover })
         {
-            if (_cover == null) border.Themed(Border.BackgroundProperty, "IslandPlaceholder");
-            else border.Background = _cover;
+            if (brush == null) border.Themed(Border.BackgroundProperty, "IslandPlaceholder");
+            else border.Background = brush;
+            // Feine Glaskante ums Cover
+            border.BorderThickness = new Thickness(glass ? 1 : 0);
+            border.BorderBrush = glass ? GlassEdge : null;
         }
         _view.CoverIcon.Visibility = _cover == null ? Visibility.Visible : Visibility.Collapsed;
 
@@ -737,10 +777,8 @@ public sealed class MediaModule : IslandModule
         _view.PlayBtn.Click += async (_, _) => await TogglePlay();
         _mediumPlay.Click += async (_, _) => await TogglePlay();
 
-        // "•••" und Equalizer öffnen die Quellen-Auswahl
+        // Equalizer-Knopf ("•••") öffnet die Quellen-Auswahl
         _view.MoreBtn.Click += (_, _) => ToggleSourcePanel();
-        _view.EqHost.MouseLeftButtonDown += (_, e) => e.Handled = true;
-        _view.EqHost.MouseLeftButtonUp += (_, e) => { e.Handled = true; ToggleSourcePanel(); };
 
         // Cover: Klick öffnet die App (und zählt nicht als Ziehen/Doppelklick der Insel)
         _view.CoverBorder.MouseLeftButtonDown += (_, e) => e.Handled = true;

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -13,81 +15,160 @@ namespace Island.Modules;
 /// <summary>Kleines Kontrollzentrum: Lautstärke, Helligkeit und Schnell-Knöpfe – im Look der Insel.</summary>
 public sealed class ControlModule : IslandModule
 {
+    /// <summary>Alle Knöpfe, die man ins Kontrollzentrum legen kann (Einstellungen → Funktionen).</summary>
+    public static readonly (string Id, string Glyph, string Label)[] Actions =
+    {
+        ("WLAN", "\uE701", "WLAN"), ("Bluetooth", "\uE702", "Bluetooth"), ("Flugmodus", "\uE709", "Flugmodus"),
+        ("Stumm", "\uE74F", "Stumm"), ("Dunkelmodus", "\uE708", "Dunkelmodus"), ("Kamera", "\uE722", "Kamera"),
+        ("Screenshot", "\uE91B", "Screenshot"), ("Aufnahme", "\uE714", "Aufnahme"), ("Sperren", "\uE72E", "Sperren"),
+        ("NichtStoeren", "\uEA8F", "Nicht stören"), ("Nachtlicht", "\uE706", "Nachtlicht"), ("Energiesparen", "\uE83F", "Energie"),
+        ("Desktop", "\uE80F", "Desktop"), ("Zwischenablage", "\uE77F", "Ablage"), ("Emojis", "\uE76E", "Emojis"),
+        ("Projizieren", "\uE7F4", "Projizieren"), ("Rechner", "\uE8EF", "Rechner"), ("Explorer", "\uEC50", "Explorer"),
+        ("Papierkorb", "\uE74D", "Papierkorb"), ("Einstellungen", "\uE713", "Einstellungen"),
+    };
+
+    public const int MaxButtons = 12;
+
     public override string Name => "Kontrollzentrum";
-    public override string Icon => "";
+    public override string Icon => "\uE9E9";
     public override int Order => 25;
-    public override double ExpandedHeight => 124;
+    public override double ExpandedHeight => Math.Max(Context.Settings.KontrollRegler ? 124 : 60, Rows * 60 + 4);
     public override FrameworkElement? ExpandedView => _root;
+
+    private int Columns => Context.Settings.KontrollRegler ? 4 : 6;
+    private int Rows => Math.Max(1, (int)Math.Ceiling(ButtonIds().Count / (double)Columns));
 
     private Grid _root = null!;
     private PillSlider _volume = null!, _brightness = null!;
-    private Toggle _wifi = null!, _bluetooth = null!, _flight = null!, _mute = null!;
+    private readonly Dictionary<string, Toggle> _buttons = new();
     private readonly DispatcherTimer _poll = new() { Interval = TimeSpan.FromSeconds(1.5) };
     private bool _shown;
+    private string _signature = "";
 
     protected override void OnInitialize()
     {
-        _root = new Grid();
+        _root = new Grid { Background = Brushes.Transparent };
+        // Mausrad irgendwo im Kontrollzentrum = Lautstärke
+        _root.MouseWheel += (_, e) =>
+        {
+            if (_brightness != null && _brightness.IsMouseOver) return;
+            var v = Math.Clamp((AudioControl.Volume ?? 0) + (e.Delta > 0 ? 0.04 : -0.04), 0, 1);
+            AudioControl.Volume = v;
+            if (_volume != null) _volume.Value = v;
+            RefreshAudio();
+            e.Handled = true;
+        };
+        _poll.Tick += (_, _) => RefreshAudio();
+        Rebuild();
+    }
+
+    private List<string> ButtonIds() => Context.Settings.KontrollKnoepfe
+        .Where(id => Actions.Any(a => a.Id == id)).Distinct().Take(MaxButtons).ToList();
+
+    public override void OnSettingsChanged()
+    {
+        var sig = string.Join(",", ButtonIds()) + Context.Settings.KontrollRegler;
+        if (sig == _signature) return;
+        Rebuild();
+        Context.RequestLayoutRefresh();
+        if (_shown) OnShown();
+    }
+
+    private void Rebuild()
+    {
+        _signature = string.Join(",", ButtonIds()) + Context.Settings.KontrollRegler;
+        _root.Children.Clear();
+        _root.ColumnDefinitions.Clear();
+        _buttons.Clear();
         _root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         _root.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        // ---------- Knöpfe (4 × 2)
+        // ---------- Knöpfe
         var grid = new Grid { VerticalAlignment = VerticalAlignment.Center };
-        for (int c = 0; c < 4; c++) grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.RowDefinitions.Add(new RowDefinition());
-        grid.RowDefinitions.Add(new RowDefinition());
+        for (int c = 0; c < Columns; c++) grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        for (int r = 0; r < Rows; r++) grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(60) });
 
-        _wifi = new Toggle("", "WLAN", () => _ = ToggleRadio(WRadios.RadioKind.WiFi, "ms-settings:network-wifi"));
-        _bluetooth = new Toggle("", "Bluetooth", () => _ = ToggleRadio(WRadios.RadioKind.Bluetooth, "ms-settings:bluetooth"));
-        _flight = new Toggle("", "Flugmodus", () => _ = ToggleFlight());
-        _mute = new Toggle("", "Stumm", () =>
+        var ids = ButtonIds();
+        for (int i = 0; i < ids.Count; i++)
         {
-            AudioControl.Muted = !(AudioControl.Muted ?? false);
-            RefreshAudio();
-        });
-        var camera = new Toggle("", "Kamera", () => IslandContext.Open("microsoft.windows.camera:"));
-        var shot = new Toggle("", "Screenshot", () => IslandContext.Open("ms-screenclip:"));
-        var focus = new Toggle("", "Fokus", () => IslandContext.Open("ms-settings:quiethours"));
-        var lockPc = new Toggle("", "Sperren", () => LockWorkStation());
-
-        // Rechtsklick = passende Windows-Einstellungen
-        _wifi.RightClick = () => IslandContext.Open("ms-settings:network-wifi");
-        _bluetooth.RightClick = () => IslandContext.Open("ms-settings:bluetooth");
-        _flight.RightClick = () => IslandContext.Open("ms-settings:network-airplanemode");
-        _mute.RightClick = () => IslandContext.Open("ms-settings:sound");
-
-        var all = new[] { _wifi, _bluetooth, _flight, _mute, camera, shot, focus, lockPc };
-        for (int i = 0; i < all.Length; i++)
-        {
-            Grid.SetColumn(all[i], i % 4);
-            Grid.SetRow(all[i], i / 4);
-            grid.Children.Add(all[i]);
+            var (id, glyph, label) = Actions.First(a => a.Id == ids[i]);
+            var t = new Toggle(glyph, label, () => Run(id));
+            t.RightClick = SettingsPage(id) is string page ? () => IslandContext.Open(page) : null;
+            Grid.SetColumn(t, i % Columns);
+            Grid.SetRow(t, i / Columns);
+            grid.Children.Add(t);
+            _buttons[id] = t;
         }
+        if (ids.Count == 0)
+            grid.Children.Add(new TextBlock { Text = "Knöpfe wählst du in den Einstellungen → Funktionen", HorizontalAlignment = HorizontalAlignment.Center, TextWrapping = TextWrapping.Wrap }
+                .Themed(TextBlock.ForegroundProperty, "IslandSubText"));
         _root.Children.Add(grid);
 
         // ---------- Regler
-        var sliders = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(10, 0, 2, 0) };
-        _volume = new PillSlider("", "Lautstärke");
-        _volume.ValueChanged += v => AudioControl.Volume = v;
-        _brightness = new PillSlider("", "Helligkeit") { Margin = new Thickness(8, 0, 0, 0) };
-        _brightness.ValueChanged += v => BrightnessControl.Set((int)Math.Round(v * 100));
-        sliders.Children.Add(_volume);
-        sliders.Children.Add(_brightness);
-        Grid.SetColumn(sliders, 1);
-        _root.Children.Add(sliders);
-
-        // Mausrad irgendwo im Kontrollzentrum = Lautstärke
-        _root.Background = Brushes.Transparent;
-        _root.MouseWheel += (_, e) =>
+        if (Context.Settings.KontrollRegler)
         {
-            if (_brightness.IsMouseOver) return;
-            var v = Math.Clamp((AudioControl.Volume ?? 0) + (e.Delta > 0 ? 0.04 : -0.04), 0, 1);
-            AudioControl.Volume = v;
-            _volume.Value = v;
-            e.Handled = true;
-        };
+            var height = Math.Max(112, Rows * 60 - 8);
+            var sliders = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(10, 0, 2, 0), VerticalAlignment = VerticalAlignment.Center };
+            _volume = new PillSlider("\uE767", "Lautstärke") { Height = height };
+            _volume.ValueChanged += v => { AudioControl.Volume = v; RefreshAudio(); };
+            _brightness = new PillSlider("\uE706", "Helligkeit") { Margin = new Thickness(8, 0, 0, 0), Height = height };
+            _brightness.ValueChanged += v => BrightnessControl.Set((int)Math.Round(v * 100));
+            sliders.Children.Add(_volume);
+            sliders.Children.Add(_brightness);
+            Grid.SetColumn(sliders, 1);
+            _root.Children.Add(sliders);
+        }
+        else
+        {
+            _volume = null!;
+            _brightness = null!;
+        }
+    }
 
-        _poll.Tick += (_, _) => RefreshAudio();
+    private static string? SettingsPage(string id) => id switch
+    {
+        "WLAN" => "ms-settings:network-wifi",
+        "Bluetooth" => "ms-settings:bluetooth",
+        "Flugmodus" => "ms-settings:network-airplanemode",
+        "Stumm" => "ms-settings:sound",
+        "Dunkelmodus" => "ms-settings:colors",
+        "Nachtlicht" => "ms-settings:nightlight",
+        "Energiesparen" => "ms-settings:batterysaver",
+        "NichtStoeren" => "ms-settings:notifications",
+        "Projizieren" => "ms-settings:display",
+        _ => null,
+    };
+
+    private void Run(string id)
+    {
+        const byte WIN = 0x5B, ALT = 0x12;
+        switch (id)
+        {
+            case "WLAN": _ = ToggleRadio(WRadios.RadioKind.WiFi, "ms-settings:network-wifi"); break;
+            case "Bluetooth": _ = ToggleRadio(WRadios.RadioKind.Bluetooth, "ms-settings:bluetooth"); break;
+            case "Flugmodus": _ = ToggleFlight(); break;
+            case "Stumm": AudioControl.Muted = !(AudioControl.Muted ?? false); RefreshAudio(); break;
+            case "Dunkelmodus":
+                var dark = Native.ToggleDarkMode();
+                if (dark == null) IslandContext.Open("ms-settings:colors");
+                else if (_buttons.TryGetValue("Dunkelmodus", out var b)) b.On = dark.Value;
+                break;
+            case "Kamera": IslandContext.Open("microsoft.windows.camera:"); break;
+            case "Screenshot": IslandContext.Open("ms-screenclip:"); break;
+            case "Aufnahme": Native.SendKeys(WIN, ALT, 0x52); break;           // Win + Alt + R
+            case "Sperren": LockWorkStation(); break;
+            case "NichtStoeren": IslandContext.Open("ms-settings:quiethours"); break;
+            case "Nachtlicht": IslandContext.Open("ms-settings:nightlight"); break;
+            case "Energiesparen": IslandContext.Open("ms-settings:batterysaver"); break;
+            case "Desktop": Native.SendKeys(WIN, 0x44); break;                  // Win + D
+            case "Zwischenablage": Native.SendKeys(WIN, 0x56); break;           // Win + V
+            case "Emojis": Native.SendKeys(WIN, 0xBE); break;                   // Win + .
+            case "Projizieren": Native.SendKeys(WIN, 0x50); break;              // Win + P
+            case "Rechner": IslandContext.Open("calc.exe"); break;
+            case "Explorer": IslandContext.Open("explorer.exe"); break;
+            case "Papierkorb": IslandContext.Open("shell:RecycleBinFolder"); break;
+            case "Einstellungen": IslandContext.Open("ms-settings:"); break;
+        }
     }
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
@@ -97,8 +178,9 @@ public sealed class ControlModule : IslandModule
     {
         _shown = true;
         RefreshAudio();
-        _ = RefreshRadios();
-        _ = RefreshBrightness();
+        if (_buttons.TryGetValue("Dunkelmodus", out var dm)) dm.On = Native.IsDarkMode() ?? false;
+        if (_buttons.ContainsKey("WLAN") || _buttons.ContainsKey("Bluetooth") || _buttons.ContainsKey("Flugmodus")) _ = RefreshRadios();
+        if (_brightness != null) _ = RefreshBrightness();
         _poll.Start(); // falls die Lautstärke woanders geändert wird
     }
 
@@ -111,17 +193,18 @@ public sealed class ControlModule : IslandModule
     private void RefreshAudio()
     {
         var v = AudioControl.Volume;
+        var muted = AudioControl.Muted ?? false;
+        if (_buttons.TryGetValue("Stumm", out var mute)) mute.On = muted;
+        if (_volume == null) return;
         if (!_volume.Dragging) _volume.Value = v ?? 0;
         _volume.IsEnabled = v != null;
-        var muted = AudioControl.Muted ?? false;
-        _mute.On = muted;
-        _volume.Glyph = muted || (v ?? 0) < 0.01 ? "" : (v ?? 0) < 0.34 ? "" : (v ?? 0) < 0.67 ? "" : "";
+        _volume.Glyph = muted || (v ?? 0) < 0.01 ? "\uE74F" : (v ?? 0) < 0.34 ? "\uE993" : (v ?? 0) < 0.67 ? "\uE994" : "\uE995";
     }
 
     private async Task RefreshBrightness()
     {
         var b = await BrightnessControl.GetAsync();
-        if (!_shown) return;
+        if (!_shown || _brightness == null) return;
         _brightness.IsEnabled = b != null;
         _brightness.ToolTip = b == null ? "Dieser Bildschirm lässt sich nicht über Windows dimmen" : "Helligkeit";
         if (b is int value && !_brightness.Dragging) _brightness.Value = value / 100.0;
@@ -136,9 +219,9 @@ public sealed class ControlModule : IslandModule
             if (r.Kind == WRadios.RadioKind.WiFi) wifi ??= r;
             if (r.Kind == WRadios.RadioKind.Bluetooth) bt ??= r;
         }
-        _wifi.On = wifi?.State == WRadios.RadioState.On;
-        _bluetooth.On = bt?.State == WRadios.RadioState.On;
-        _flight.On = await RadioControl.FlightActiveAsync();
+        if (_buttons.TryGetValue("WLAN", out var w)) w.On = wifi?.State == WRadios.RadioState.On;
+        if (_buttons.TryGetValue("Bluetooth", out var bb)) bb.On = bt?.State == WRadios.RadioState.On;
+        if (_buttons.TryGetValue("Flugmodus", out var f)) f.On = await RadioControl.FlightActiveAsync();
     }
 
     private async Task ToggleRadio(WRadios.RadioKind kind, string fallback)

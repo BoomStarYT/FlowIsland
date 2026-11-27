@@ -32,10 +32,10 @@ public static class Ui
 public static class Anim
 {
     /// <summary>Federnd wie bei iOS (ca. 5 % Überschwingen).</summary>
-    public static readonly IEasingFunction Spring = Freeze(new SpringEase { Damping = 0.72, Frequency = 1.55 });
+    public static readonly IEasingFunction Spring = Freeze(new SpringEase { Damping = 0.78, Frequency = 1.7 });
 
     /// <summary>Weiche Feder fast ohne Überschwingen (zum Zuklappen).</summary>
-    public static readonly IEasingFunction SpringSoft = Freeze(new SpringEase { Damping = 0.9, Frequency = 1.35 });
+    public static readonly IEasingFunction SpringSoft = Freeze(new SpringEase { Damping = 0.92, Frequency = 1.5 });
 
     public static readonly IEasingFunction Smooth = Freeze(new CubicEase { EasingMode = EasingMode.EaseOut });
 

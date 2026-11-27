@@ -41,6 +41,12 @@ public sealed class Settings
     /// <summary>Eigene Farbe für den Fortschrittsbalken ("" = Akzentfarbe).</summary>
     public string FortschrittFarbe { get; set; } = "";
 
+    /// <summary>Glas-Stile: echte Unschärfe hinter der Insel (Windows-Blur).</summary>
+    public bool EchterBlur { get; set; } = true;
+
+    /// <summary>Glas-Stile: Cover wird farblos und durchsichtig, damit alles einheitlich wirkt.</summary>
+    public bool CoverGlas { get; set; } = true;
+
     /// <summary>Selbst gespeicherte Designs (lokal, nur in dieser Datei).</summary>
     public List<DesignEintrag> EigeneDesigns { get; set; } = new();
 
@@ -126,6 +132,12 @@ public sealed class Settings
     /// <summary>Eigene Aufgaben mit optionaler Erinnerung.</summary>
     public List<AufgabeEintrag> Aufgaben { get; set; } = new();
     public bool AufgabenTon { get; set; } = true;
+
+    /// <summary>Knöpfe im Kontrollzentrum (Reihenfolge = Anzeige), siehe ControlModule.Actions.</summary>
+    public List<string> KontrollKnoepfe { get; set; } = new() { "WLAN", "Bluetooth", "Flugmodus", "Stumm", "Kamera", "Screenshot", "Dunkelmodus", "Sperren" };
+
+    /// <summary>Lautstärke- und Helligkeitsregler im Kontrollzentrum zeigen.</summary>
+    public bool KontrollRegler { get; set; } = true;
 
     /// <summary>Ordner für Apps (Reihenfolge = Anzeige).</summary>
     public List<string> AppOrdner { get; set; } = new();

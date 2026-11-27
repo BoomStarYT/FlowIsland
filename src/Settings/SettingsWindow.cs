@@ -26,7 +26,7 @@ public sealed class SettingsWindow : Window
     {
         ("Neutral", new[] { "#0A0A0C", "#1C1C1E", "#2C2C2E", "#48484A", "#8E8E93", "#E5E5EA", "#F5F5F7" }),
         ("Pastell", new[] { "#FFC8DD", "#FFD6A5", "#FDFFB6", "#CAFFBF", "#9BF6FF", "#A0C4FF", "#BDB2FF" }),
-        ("Kräftig", new[] { "#FF453A", "#FF9F0A", "#FFD60A", "#30D158", "#64D2FF", "#0A84FF", "#BF5AF2" }),
+        ("Sanft", new[] { "#E07A6F", "#E3A36B", "#D9C27A", "#8FC9A0", "#7FB8C9", "#7F9CD6", "#B49BD9" }),
         ("Tief", new[] { "#2B1055", "#3A1C71", "#0F2027", "#134E5E", "#1A2980", "#3E2723", "#5B0E2D" }),
     };
 
@@ -36,29 +36,29 @@ public sealed class SettingsWindow : Window
 
     private static readonly DesignEintrag[] Presets =
     {
-        P("Mitternacht", Theme.Solid, "#0A0A0C", "#0A0A0C", "#30D158"),
-        P("Cover-Farben", Theme.Cover, "#0C0C0F", "#0C0C0F", "#FF375F"),
-        P("Klarglas", Theme.PureGlass, "#FFFFFF", "#FFFFFF", "#FFFFFF", klarheit: 0.75),
-        P("Milchglas", Theme.PureGlass, "#FFFFFF", "#FFFFFF", "#0A84FF", klarheit: 0.15),
-        P("Liquid Glass", Theme.Glass, "#16161D", "#16161D", "#64D2FF", 0.5),
-        P("Frost", Theme.Glass, "#F2F2F7", "#F2F2F7", "#0A84FF", 0.6),
-        P("Graphit", Theme.Gradient, "#232526", "#414345", "#FFD60A"),
-        P("Nordlicht", Theme.Gradient, "#0F2027", "#2C5364", "#5EEAD4"),
+        P("Mitternacht", Theme.Solid, "#0A0A0C", "#0A0A0C", "#8FD3A8"),
+        P("Cover-Farben", Theme.Cover, "#0C0C0F", "#0C0C0F", "#E58FA0"),
+        P("Klarglas", Theme.PureGlass, "#FFFFFF", "#FFFFFF", "#FFFFFF", klarheit: 1.0),
+        P("Milchglas", Theme.PureGlass, "#FFFFFF", "#FFFFFF", "#7F9CD6", klarheit: 0.05),
+        P("Liquid Glass", Theme.Glass, "#16161D", "#16161D", "#9CC8E0", 0.5, klarheit: 0.35),
+        P("Frost", Theme.Glass, "#F2F2F7", "#F2F2F7", "#6E8FC7", 0.6, klarheit: 0.15),
+        P("Graphit", Theme.Gradient, "#232526", "#414345", "#E2C98A"),
+        P("Nordlicht", Theme.Gradient, "#0F2027", "#2C5364", "#9ED9CC"),
         P("Matcha", Theme.Gradient, "#134E5E", "#71B280", "#E8FFD6"),
         P("Aubergine", Theme.Gradient, "#2B1055", "#7597DE", "#FFC8DD"),
         P("Lavendel", Theme.Gradient, "#A18CD1", "#FBC2EB", "#5E5CE6"),
         P("Pfirsich", Theme.Gradient, "#FFDDE1", "#EE9CA7", "#C2185B"),
         P("Rosé Gold", Theme.Gradient, "#B76E79", "#E8C4B8", "#7A2E3A"),
         P("Sunset", Theme.Gradient, "#FF5E62", "#FF9966", "#FFFFFF"),
-        P("Ozean", Theme.Gradient, "#2E3192", "#1BFFFF", "#FFFFFF"),
+        P("Ozean", Theme.Gradient, "#2E3192", "#3FB8C8", "#F5F5F7"),
         P("Xiaomi", Theme.Gradient, "#FF6900", "#FF3D00", "#FFFFFF"),
         P("Espresso", Theme.Gradient, "#3E2723", "#8D6E63", "#FFCC80"),
-        P("Mitternachtsblau", Theme.Gradient, "#0B132B", "#1C2541", "#6FFFE9"),
+        P("Mitternachtsblau", Theme.Gradient, "#0B132B", "#1C2541", "#A8D8CF"),
         P("Pflaume", Theme.Gradient, "#2D0B3A", "#7B2869", "#FFB3C6"),
         P("Wald", Theme.Gradient, "#0B1D13", "#1F4D36", "#B7E4C7"),
         P("Champagner", Theme.Gradient, "#F7E7CE", "#E6C79C", "#8A5A2B"),
-        P("Neon", Theme.Gradient, "#120458", "#7A04EB", "#FE75FE"),
-        P("Eisblau", Theme.Glass, "#BFE3FF", "#BFE3FF", "#0A84FF", 0.55),
+        P("Nachtviolett", Theme.Gradient, "#1B1040", "#5B2A86", "#D7A6E8"),
+        P("Eisblau", Theme.Glass, "#BFE3FF", "#BFE3FF", "#5F86B8", 0.55, klarheit: 0.4),
     };
 
     private static readonly Dictionary<string, string> ModuleDescriptions = new(StringComparer.OrdinalIgnoreCase)
@@ -410,8 +410,9 @@ public sealed class SettingsWindow : Window
         // ---------- Vorlagen
         p.Children.Add(SectionTitle("Vorlagen"));
         var presets = new WrapPanel { Margin = new Thickness(8, 10, 8, 4) };
-        foreach (var preset in Presets) presets.Children.Add(DesignTile(preset, null));
-        var random = Btn("\uE8B1  Überrasch mich", "Secondary", () =>
+        foreach (var preset in _showAllPresets ? Presets : Presets.Take(7)) presets.Children.Add(DesignTile(preset, null));
+        var morePresets = MoreButton(_showAllPresets, Presets.Length, () => { _showAllPresets = !_showAllPresets; RebuildPage(); });
+        var random = IconTextBtn("\uE8B1", "Überrasch mich", "Secondary", () =>
         {
             var (f1, f2, angle, accent) = Theme.RandomPalette();
             _s.Stil = Theme.Gradient;
@@ -423,8 +424,7 @@ public sealed class SettingsWindow : Window
             _s.NotifyChanged();
             RebuildPage();
         });
-        random.FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets, Segoe UI Variable Text, Segoe UI");
-        p.Children.Add(Card(presets, Row("Zufällige Farbkombi", "Erfindet eine harmonische Kombi – so oft klicken, bis sie dir gefällt", random)));
+        p.Children.Add(Card(presets, morePresets, Row("Zufällige Farbkombi", "Erfindet eine harmonische Kombi – so oft klicken, bis sie dir gefällt", random)));
 
         // ---------- Meine Designs
         p.Children.Add(SectionTitle("Meine Designs"));
@@ -479,19 +479,23 @@ public sealed class SettingsWindow : Window
             style.Add(Row("Deckkraft", null,
                 SliderControl(30, 100, _s.Deckkraft * 100, v => $"{v:0} %", v => { _s.Deckkraft = v / 100; _s.NotifyChanged(); }, 5)));
         }
-        else if (_s.Stil == Theme.PureGlass)
+        else if (Theme.IsGlass(_s))
         {
-            style.Add(Info("Reines Glas ohne Farbe – wie bei Apple. Links milchig und wolkig, rechts ganz klar. " +
-                           "Hinweis: Echte Unschärfe (Blur) hinter der Insel ist in Windows mit flüssigen Animationen nicht sauber machbar."));
+            style.Add(Info(_s.Stil == Theme.PureGlass
+                ? "Reines Glas ohne Farbe – wie bei Apple. Links: Milchglas mit echter Unschärfe dahinter. Rechts: komplett klar und durchsichtig."
+                : "Getöntes Glas. Links: mattiert mit echter Unschärfe dahinter. Rechts: klar und durchsichtig, nur leicht getönt."));
             style.Add(Row("Glas", null, null, below: RangeSlider(0, 100, _s.GlasKlarheit * 100, "Wolkig", "Klar",
-                v => $"{v:0} % klar", v => { _s.GlasKlarheit = v / 100; _s.NotifyChanged(); }, 5, enabled: true)));
+                v => v >= 85 ? "Ganz klar" : v <= 15 ? "Milchglas" : $"{v:0} % klar",
+                v => { _s.GlasKlarheit = v / 100; _s.NotifyChanged(); }, 5, enabled: true)));
+            if (_s.Stil == Theme.Glass)
+                style.Add(Row("Glas-Tönung", null, null, below: ColorPicker(_s.Farbe1, v => { _s.Farbe1 = v; _s.NotifyChanged(); })));
+            style.Add(Row("Echte Unschärfe", "Windows macht hinter der Insel alles weich (wie im Foto). Aus = nur durchsichtig.",
+                Toggle(_s.EchterBlur, v => { _s.EchterBlur = v; _s.NotifyChanged(); }), glyph: "\uE753"));
+            style.Add(Row("Cover im Glas-Look", "Album-Cover farblos und leicht durchsichtig – alles wirkt einheitlich",
+                Toggle(_s.CoverGlas, v => { _s.CoverGlas = v; _s.NotifyChanged(); }), glyph: "\uE8B9"));
         }
         else
         {
-            if (_s.Stil == Theme.Glass)
-            {
-                style.Add(Info("Getöntes Glas mit Lichtkante und Spiegelung. Für Glas ganz ohne Farbe wähle „Klarglas“."));
-            }
             var firstColorLabel = _s.Stil == Theme.Gradient ? "Farbe 1" : _s.Stil == Theme.Glass ? "Glas-Tönung" : "Farbe";
             style.Add(Row(firstColorLabel, null, null, below: ColorPicker(_s.Farbe1, v => { _s.Farbe1 = v; _s.NotifyChanged(); })));
             if (_s.Stil == Theme.Gradient)
@@ -538,7 +542,12 @@ public sealed class SettingsWindow : Window
     {
         var root = new StackPanel { Margin = new Thickness(14, 10, 10, 8) };
         var start = DateTime.Now;
-        foreach (var (category, items) in ProgressTrack.Catalog)
+        var favorites = new[] { "Welle", "Linie", "Verlauf", "Katze", "Herzschlag" };
+        var catalog = _showAllProgress
+            ? ProgressTrack.Catalog
+            : new[] { ("Beliebt", ProgressTrack.Catalog.SelectMany(c => c.Items)
+                        .Where(i => favorites.Contains(i.Id) || i.Id == _s.Fortschritt).ToArray()) };
+        foreach (var (category, items) in catalog)
         {
             root.Children.Add(new TextBlock { Text = category, FontSize = 12, FontWeight = FontWeights.SemiBold, Margin = new Thickness(2, 6, 0, 6) }
                 .Themed(TextBlock.ForegroundProperty, "S.Sub"));
@@ -579,12 +588,26 @@ public sealed class SettingsWindow : Window
             }
             root.Children.Add(wrap);
         }
+        var total = ProgressTrack.Catalog.Sum(c => c.Items.Length);
+        root.Children.Add(MoreButton(_showAllProgress, total, () => { _showAllProgress = !_showAllProgress; RebuildPage(); }, "Designs"));
+
         // Vorschauen anhalten, wenn das Fenster zu ist
         root.Unloaded += (_, _) =>
         {
             foreach (var t in FindAll<ProgressTrack>(root)) t.Live = false;
         };
         return root;
+    }
+
+    private static T? FindChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T t) return t;
+            if (FindChild<T>(child) is T found) return found;
+        }
+        return null;
     }
 
     private static IEnumerable<T> FindAll<T>(DependencyObject parent) where T : DependencyObject
@@ -765,6 +788,61 @@ public sealed class SettingsWindow : Window
             }), glyph: icon));
         }
         p.Children.Add(Card(rows.ToArray()));
+
+        // ---------- Kontrollzentrum
+        p.Children.Add(SectionTitle("Kontrollzentrum – Knöpfe wählen"));
+        var chosen = _s.KontrollKnoepfe;
+        var ccRows = new List<UIElement>
+        {
+            Row("Regler für Lautstärke & Helligkeit", null, Toggle(_s.KontrollRegler, v => { _s.KontrollRegler = v; _s.NotifyChanged(); }), glyph: "\uE767"),
+        };
+        // Zuerst die gewählten (in ihrer Reihenfolge), dann der Rest
+        var ordered = chosen.Where(id => Island.Modules.ControlModule.Actions.Any(a => a.Id == id))
+            .Concat(Island.Modules.ControlModule.Actions.Select(a => a.Id).Where(id => !chosen.Contains(id))).ToList();
+        foreach (var id in ordered)
+        {
+            var action = Island.Modules.ControlModule.Actions.First(a => a.Id == id);
+            var on = chosen.Contains(id);
+            var g = new Grid { Margin = new Thickness(12, 6, 8, 6) };
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(32) });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var icon = new TextBlock { Text = action.Glyph, FontFamily = Ui.IconFont, FontSize = 15, VerticalAlignment = VerticalAlignment.Center };
+            var label = new TextBlock { Text = action.Label, VerticalAlignment = VerticalAlignment.Center, FontSize = 13.5 };
+            if (!on) { icon.Opacity = 0.45; label.Themed(TextBlock.ForegroundProperty, "S.Sub"); }
+            Grid.SetColumn(label, 1);
+            g.Children.Add(icon);
+            g.Children.Add(label);
+            if (on)
+            {
+                var index = chosen.IndexOf(id);
+                var up = IconBtn("\uE70E", "Nach vorne", () => { Move(chosen, index, -1); _s.NotifyChanged(); RebuildPage(); });
+                var down = IconBtn("\uE70D", "Nach hinten", () => { Move(chosen, index, 1); _s.NotifyChanged(); RebuildPage(); });
+                Grid.SetColumn(up, 2);
+                Grid.SetColumn(down, 3);
+                g.Children.Add(up);
+                g.Children.Add(down);
+            }
+            var toggle = Toggle(on, v =>
+            {
+                if (v)
+                {
+                    if (chosen.Count >= Island.Modules.ControlModule.MaxButtons) { RebuildPage(); return; }
+                    chosen.Add(id);
+                }
+                else chosen.Remove(id);
+                _s.NotifyChanged();
+                RebuildPage();
+            });
+            toggle.Margin = new Thickness(8, 0, 0, 0);
+            Grid.SetColumn(toggle, 4);
+            g.Children.Add(toggle);
+            ccRows.Add(g);
+        }
+        ccRows.Add(Info($"Bis zu {Island.Modules.ControlModule.MaxButtons} Knöpfe. Tipp: Rechtsklick auf einen Knopf in der Insel öffnet die passende Windows-Einstellung."));
+        p.Children.Add(Card(ccRows.ToArray()));
         p.Children.Add(Sub("Eigene Funktionen kannst du als Modul hinzufügen – wie, steht in LIES-MICH.md."));
     }
 
@@ -1038,6 +1116,28 @@ public sealed class SettingsWindow : Window
         p.Children.Add(Card(rows.ToArray()));
     }
 
+    private bool _showAllPresets, _showAllProgress;
+
+    /// <summary>"Mehr anzeigen" / "Weniger anzeigen".</summary>
+    private static FrameworkElement MoreButton(bool showingAll, int total, Action toggle, string what = "Vorlagen")
+    {
+        var b = IconTextBtn(showingAll ? "\uE70E" : "\uE70D", showingAll ? "Weniger anzeigen" : $"Alle {total} {what} zeigen", "Secondary", toggle);
+        b.HorizontalAlignment = HorizontalAlignment.Left;
+        b.Margin = new Thickness(14, 2, 0, 12);
+        return b;
+    }
+
+    /// <summary>Knopf mit Symbol + Text (Symbol-Schrift nur fürs Symbol, sonst gibt's Kästchen).</summary>
+    private static Button IconTextBtn(string glyph, string text, string styleKey, Action action)
+    {
+        var content = new StackPanel { Orientation = Orientation.Horizontal };
+        content.Children.Add(new TextBlock { Text = glyph, FontFamily = Ui.IconFont, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 1, 8, 0) });
+        content.Children.Add(new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center });
+        var button = new Button { Content = content }.Themed(StyleProperty, styleKey);
+        button.Click += (_, _) => action();
+        return button;
+    }
+
     private static void Move<T>(List<T> list, int index, int delta)
     {
         var target = index + delta;
@@ -1081,6 +1181,7 @@ public sealed class SettingsWindow : Window
             Focusable = false,
             Tag = "inner",
         };
+        SmoothScroller.Attach(scroll, 0.32);
         panel.Children.Add(scroll);
 
         void Fill()
@@ -1358,7 +1459,7 @@ public sealed class SettingsWindow : Window
         p.Children.Add(Sub("Selbst gebaut, Open Source – keine Daten werden irgendwohin gesendet."));
 
         p.Children.Add(Card(
-            Row("Dynamic Island", "Version 1.6", null, glyph: ""),
+            Row("Dynamic Island", "Version 1.7", null, glyph: ""),
             Row("Einstellungsdatei", "Alles als Text bearbeiten (für Profis)",
                 Btn("Öffnen", "Secondary", () => IslandContext.Open("notepad.exe", $"\"{Settings.FilePath}\""))),
             Row("Fehlerprotokoll", "Falls etwas nicht klappt – Inhalt an Claude schicken",
@@ -1672,6 +1773,14 @@ public sealed class SettingsWindow : Window
 
         var search = new TextBox { Margin = new Thickness(0, 0, 0, 8) }.Themed(StyleProperty, "DarkBox");
         var list = new ListBox { Height = 200, ItemsSource = names }.Themed(StyleProperty, "FontList");
+        // Pixelweise + weich gleitend scrollen statt Zeile für Zeile springen
+        VirtualizingPanel.SetScrollUnit(list, ScrollUnit.Pixel);
+        VirtualizingPanel.SetIsVirtualizing(list, true);
+        list.Loaded += (_, _) =>
+        {
+            var sv = FindChild<ScrollViewer>(list);
+            if (sv != null) SmoothScroller.Attach(sv, 0.32);
+        };
         list.SelectedItem = names.FirstOrDefault(n => n.Equals(_s.Schriftart, StringComparison.OrdinalIgnoreCase));
 
         list.SelectionChanged += (_, _) =>

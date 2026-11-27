@@ -16,6 +16,7 @@
         <!-- Cover (Klick = Spotify öffnen) -->
         <Border x:Name="CoverBorder"
                 Width="104" Height="104"
+                BorderThickness="0"
                 VerticalAlignment="Center"
                 CornerRadius="16"
                 Background="{DynamicResource IslandPlaceholder}"
@@ -57,12 +58,12 @@
                     </TextBlock.RenderTransform>
                 </TextBlock>
                 <!-- Equalizer + "•••" (Quelle wechseln, Lyrics) -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,-6,-6,-6">
-                    <ContentControl x:Name="EqHost" Margin="0,0,4,0" VerticalAlignment="Center" Focusable="False"
-                                    Cursor="Hand" ToolTip="Quelle wechseln &amp; Lyrics" Background="Transparent"/>
-                    <Button x:Name="MoreBtn" Style="{StaticResource IconButton}" Content="&#xE712;"
-                            Width="28" Height="28" FontSize="13" ToolTip="Quelle wechseln &amp; Lyrics"/>
-                </StackPanel>
+                <!-- Equalizer = gleichzeitig der "•••"-Knopf (Quelle wechseln, Lyrics) -->
+                <Button x:Name="MoreBtn" Grid.Column="1" Style="{StaticResource IconButton}"
+                        Width="34" Height="28" Margin="8,-6,-6,-6" VerticalAlignment="Center"
+                        ToolTip="Quelle wechseln &amp; Lyrics">
+                    <ContentControl x:Name="EqHost" Focusable="False" IsHitTestVisible="False"/>
+                </Button>
             </Grid>
             <TextBlock x:Name="ArtistText"
                        Grid.Row="1"

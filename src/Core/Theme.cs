@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
+using System.Windows.Media.Imaging;
 
 namespace Island.Core;
 
@@ -46,40 +47,45 @@ public static class Theme
         double rimThickness = 1;
         Color reference; // für die Entscheidung helle oder dunkle Schrift
 
+        var clear = Math.Clamp(s.GlasKlarheit, 0, 1);
+        var blur = BlurWanted(s);
+        Brush? noise = null;
+
         if (style == PureGlass)
         {
-            // Reines Glas ohne Farbe: wolkig = milchig-weiss, klar = fast durchsichtig.
-            // Bei klarem Glas liegt ein ganz leichter dunkler Kern darunter, damit Text lesbar bleibt.
-            var clear = Math.Clamp(s.GlasKlarheit, 0, 1);
-            var dark = Lerp(0.0, 0.24, clear);
-            var top = Over(Colors.White, Lerp(0.62, 0.10, clear), Colors.Black, dark);
-            var bottom = Over(Colors.White, Lerp(0.46, 0.04, clear), Colors.Black, dark);
+            // Reines Glas ohne Farbe. Wolkig = milchig (mit echtem Blur), klar = wirklich durchsichtig.
+            double topA = blur ? Lerp(0.40, 0.07, clear) : Lerp(0.72, 0.04, clear);
+            double botA = blur ? Lerp(0.28, 0.03, clear) : Lerp(0.56, 0.02, clear);
+            var darkA = blur ? Lerp(0.05, 0.14, clear) : Lerp(0.0, 0.16, clear);
+            var top = Over(Colors.White, topA, Colors.Black, darkA);
+            var bottom = Over(Colors.White, botA, Colors.Black, darkA);
             fill = Freeze(Linear(90, (top, 0), (bottom, 1)));
 
             sheenBrush = Freeze(Linear(90,
-                (WithAlpha(Colors.White, (byte)Lerp(70, 120, clear)), 0.00),
-                (WithAlpha(Colors.White, (byte)Lerp(18, 34, clear)), 0.30),
+                (WithAlpha(Colors.White, (byte)Lerp(60, 110, clear)), 0.00),
+                (WithAlpha(Colors.White, (byte)Lerp(14, 26, clear)), 0.30),
                 (WithAlpha(Colors.White, 0), 0.52),
                 (WithAlpha(Colors.White, 0), 0.80),
-                (WithAlpha(Colors.White, (byte)Lerp(16, 40, clear)), 1.00)));
+                (WithAlpha(Colors.White, (byte)Lerp(14, 40, clear)), 1.00)));
 
             rimBrush = Freeze(Linear(120,
-                (WithAlpha(Colors.White, 230), 0.00),
-                (WithAlpha(Colors.White, 50), 0.35),
-                (WithAlpha(Colors.White, 20), 0.65),
-                (WithAlpha(Colors.White, 160), 1.00)));
+                (WithAlpha(Colors.White, 235), 0.00),
+                (WithAlpha(Colors.White, 60), 0.35),
+                (WithAlpha(Colors.White, 24), 0.65),
+                (WithAlpha(Colors.White, 170), 1.00)));
             rimThickness = 1.4;
-            // Wolkig (hell) → dunkle Schrift, klar → helle Schrift
-            reference = clear < 0.45 ? Colors.White : Colors.Black;
+            noise = Noise((1 - clear) * 0.6);
+            // Sehr milchig → dunkle Schrift, sonst helle Schrift
+            reference = topA > 0.45 ? Colors.White : Colors.Black;
         }
         else if (style == Glass)
         {
-            // Getöntes, durchsichtiges Glas mit Lichtkante oben und Spiegelung
-            var alphaTop = (byte)(255 * (0.30 + 0.42 * opacity));
-            var alphaBottom = (byte)(255 * (0.40 + 0.45 * opacity));
+            // Getöntes Glas: gleiche Wolkig↔Klar-Logik, aber mit Farbe
+            double topA = blur ? Lerp(0.58, 0.12, clear) : Lerp(0.88, 0.10, clear);
+            double botA = blur ? Lerp(0.68, 0.16, clear) : Lerp(0.94, 0.14, clear);
             fill = Freeze(Linear(90,
-                (WithAlpha(Lighten(c1, 0.10), alphaTop), 0),
-                (WithAlpha(c1, alphaBottom), 1)));
+                (WithAlpha(Lighten(c1, 0.10), (byte)(255 * topA)), 0),
+                (WithAlpha(c1, (byte)(255 * botA)), 1)));
 
             sheenBrush = Freeze(Linear(90,
                 (WithAlpha(Colors.White, 82), 0.00),
@@ -89,12 +95,13 @@ public static class Theme
                 (WithAlpha(Colors.White, 18), 1.00)));
 
             rimBrush = Freeze(Linear(120,
-                (WithAlpha(Colors.White, 190), 0.00),
-                (WithAlpha(Colors.White, 40), 0.35),
-                (WithAlpha(Colors.White, 14), 0.65),
-                (WithAlpha(Colors.White, 110), 1.00)));
+                (WithAlpha(Colors.White, 200), 0.00),
+                (WithAlpha(Colors.White, 44), 0.35),
+                (WithAlpha(Colors.White, 16), 0.65),
+                (WithAlpha(Colors.White, 120), 1.00)));
             rimThickness = 1.2;
-            reference = c1;
+            noise = Noise((1 - clear) * 0.45);
+            reference = topA > 0.45 ? c1 : Colors.Black;
         }
         else if (style == Cover)
         {
@@ -146,10 +153,11 @@ public static class Theme
         sheen.Background = sheenBrush;
         rim.BorderBrush = rimBrush;
         rim.BorderThickness = new Thickness(rimThickness);
+        rim.Background = noise; // feine Körnung = Milchglas-Gefühl
 
         // Kein echter Weichzeichner-Schatten (DropShadowEffect) – der macht Animationen ruckelig.
         background.Effect = null;
-        shadow.Visibility = s.Schatten ? Visibility.Visible : Visibility.Collapsed;
+        shadow.Visibility = s.Schatten && !blur ? Visibility.Visible : Visibility.Collapsed;
         shadow.Opacity = style == Glass ? 0.6 : style == PureGlass ? 0.45 : 1.0;
 
         ApplyTextColors(IsLight(reference), AccentFor(s));
@@ -157,6 +165,43 @@ public static class Theme
         // Fortschrittsbalken: eigene Farbe oder einfach die Akzentfarbe
         var res = Application.Current.Resources;
         res["IslandProgress"] = TryParseColor(s.FortschrittFarbe, out var progress) ? Freeze(new SolidColorBrush(progress)) : res["IslandAccent"];
+    }
+
+    public static bool IsGlass(Settings s) => s.Stil is Glass or PureGlass;
+
+    /// <summary>Echter Windows-Blur: nur bei Glas, eingeschaltet und nicht ganz klar.</summary>
+    public static bool BlurWanted(Settings s) => s.EchterBlur && IsGlass(s) && s.GlasKlarheit < 0.85;
+
+    private static BitmapSource? _noise;
+
+    /// <summary>Feines Rauschen (wie mattiertes Glas), gekachelt. Wird einmal erzeugt.</summary>
+    private static Brush? Noise(double opacity)
+    {
+        if (opacity < 0.03) return null;
+        if (_noise == null)
+        {
+            const int size = 128;
+            var px = new byte[size * size * 4];
+            var rnd = new Random(7);
+            for (int i = 0; i < px.Length; i += 4)
+            {
+                var v = (byte)(rnd.Next(2) == 0 ? 0 : 255);
+                px[i] = px[i + 1] = px[i + 2] = v;
+                px[i + 3] = (byte)rnd.Next(10, 34);
+            }
+            var bmp = BitmapSource.Create(size, size, 96, 96, PixelFormats.Bgra32, null, px, size * 4);
+            bmp.Freeze();
+            _noise = bmp;
+        }
+        var brush = new ImageBrush(_noise)
+        {
+            TileMode = TileMode.Tile,
+            Viewport = new Rect(0, 0, 128, 128),
+            ViewportUnits = BrushMappingMode.Absolute,
+            Opacity = Math.Clamp(opacity, 0, 1),
+        };
+        brush.Freeze();
+        return brush;
     }
 
     /// <summary>Akzent aus den Einstellungen – oder vom Cover, wenn so eingestellt.</summary>
@@ -251,12 +296,12 @@ public static class Theme
         {
             case 0: // Pastell
                 return (ToHex(FromHsl(hue, 0.65, 0.84)), ToHex(FromHsl(hue + shift, 0.60, 0.74)), angle,
-                        ToHex(FromHsl(hue + shift, 0.70, 0.38)));
+                        ToHex(FromHsl(hue + shift, 0.45, 0.40)));
             case 1: // Kräftig
-                return (ToHex(FromHsl(hue, 0.75, 0.50)), ToHex(FromHsl(hue + shift, 0.80, 0.42)), angle, "#FFFFFF");
+                return (ToHex(FromHsl(hue, 0.55, 0.46)), ToHex(FromHsl(hue + shift, 0.55, 0.36)), angle, "#F5F5F7");
             default: // Dunkel & edel
                 return (ToHex(FromHsl(hue, 0.45, 0.13)), ToHex(FromHsl(hue + shift, 0.50, 0.28)), angle,
-                        ToHex(FromHsl(hue + shift + 150, 0.85, 0.68)));
+                        ToHex(FromHsl(hue + shift + 150, 0.45, 0.74)));
         }
     }
 

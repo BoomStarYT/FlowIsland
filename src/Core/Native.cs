@@ -109,6 +109,114 @@ internal static class Native
         return GlobalMemoryStatusEx(ref m) ? (int)m.dwMemoryLoad : 0;
     }
 
+    // ------------------------------------------------------------------ Echter Glas-Blur
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct AccentPolicy
+    {
+        public int AccentState;
+        public int AccentFlags;
+        public uint GradientColor;
+        public int AnimationId;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WindowCompositionAttributeData
+    {
+        public int Attribute;
+        public IntPtr Data;
+        public int SizeOfData;
+    }
+
+    [DllImport("user32.dll")] private static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
+    [DllImport("gdi32.dll")] private static extern IntPtr CreateRoundRectRgn(int x1, int y1, int x2, int y2, int w, int h);
+    [DllImport("gdi32.dll")] private static extern IntPtr CreateRectRgn(int x1, int y1, int x2, int y2);
+    [DllImport("gdi32.dll")] private static extern int CombineRgn(IntPtr dest, IntPtr src1, IntPtr src2, int mode);
+    [DllImport("gdi32.dll")] private static extern bool DeleteObject(IntPtr obj);
+    [DllImport("user32.dll")] private static extern int SetWindowRgn(IntPtr hwnd, IntPtr rgn, bool redraw);
+
+    /// <summary>Windows-Unschärfe hinter dem Fenster an/aus (wirkt nur innerhalb der Fensterform).</summary>
+    public static void SetBlur(IntPtr hwnd, bool on)
+    {
+        try
+        {
+            var accent = new AccentPolicy { AccentState = on ? 3 /* BLURBEHIND */ : 0 };
+            var size = Marshal.SizeOf(accent);
+            var ptr = Marshal.AllocHGlobal(size);
+            try
+            {
+                Marshal.StructureToPtr(accent, ptr, false);
+                var data = new WindowCompositionAttributeData { Attribute = 19 /* ACCENT_POLICY */, Data = ptr, SizeOfData = size };
+                SetWindowCompositionAttribute(hwnd, ref data);
+            }
+            finally { Marshal.FreeHGlobal(ptr); }
+        }
+        catch { /* ältere Windows-Version */ }
+    }
+
+    /// <summary>Fensterform = abgerundetes Rechteck (in Pixeln). flat: "Oben"/"Unten"/"Links"/"Rechts" = diese Seite gerade.</summary>
+    public static void SetRoundRegion(IntPtr hwnd, int left, int top, int right, int bottom, int diameter, string flat)
+    {
+        var rgn = CreateRoundRectRgn(left, top, right + 1, bottom + 1, diameter, diameter);
+        if (flat.Length > 0)
+        {
+            int midX = (left + right) / 2, midY = (top + bottom) / 2;
+            var square = flat switch
+            {
+                "Oben" => CreateRectRgn(left, top, right, midY),
+                "Unten" => CreateRectRgn(left, midY, right, bottom),
+                "Links" => CreateRectRgn(left, top, midX, bottom),
+                _ => CreateRectRgn(midX, top, right, bottom),
+            };
+            CombineRgn(rgn, rgn, square, 2 /* RGN_OR */);
+            DeleteObject(square);
+        }
+        if (SetWindowRgn(hwnd, rgn, true) == 0) DeleteObject(rgn);
+    }
+
+    public static void ClearRegion(IntPtr hwnd) => SetWindowRgn(hwnd, IntPtr.Zero, true);
+
+    // ------------------------------------------------------------------ Tasten senden (für Kontrollzentrum)
+
+    [DllImport("user32.dll")] private static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
+
+    /// <summary>Drückt eine Tastenkombination, z. B. (0x5B, 0x44) = Win + D.</summary>
+    public static void SendKeys(params byte[] keys)
+    {
+        foreach (var k in keys) keybd_event(k, 0, 0, UIntPtr.Zero);
+        for (int i = keys.Length - 1; i >= 0; i--) keybd_event(keys[i], 0, 2 /* KEYUP */, UIntPtr.Zero);
+    }
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr SendMessageTimeout(IntPtr hwnd, uint msg, IntPtr wParam, string lParam, uint flags, uint timeout, out IntPtr result);
+
+    /// <summary>Hell/Dunkel-Modus von Windows umschalten. Gibt den neuen Zustand zurück (true = dunkel).</summary>
+    public static bool? ToggleDarkMode()
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", writable: true);
+            if (key == null) return null;
+            var light = (key.GetValue("AppsUseLightTheme") as int? ?? 1) == 1;
+            var value = light ? 0 : 1;
+            key.SetValue("AppsUseLightTheme", value, Microsoft.Win32.RegistryValueKind.DWord);
+            key.SetValue("SystemUsesLightTheme", value, Microsoft.Win32.RegistryValueKind.DWord);
+            SendMessageTimeout((IntPtr)0xFFFF, 0x001A /* WM_SETTINGCHANGE */, IntPtr.Zero, "ImmersiveColorSet", 2, 200, out _);
+            return light; // war hell → jetzt dunkel
+        }
+        catch { return null; }
+    }
+
+    public static bool? IsDarkMode()
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+            return key == null ? null : (key.GetValue("AppsUseLightTheme") as int? ?? 1) == 0;
+        }
+        catch { return null; }
+    }
+
     /// <summary>Kein Alt+Tab-Eintrag, kein Fokus-Klauen.</summary>
     public static void MakeToolWindow(IntPtr hwnd)
     {

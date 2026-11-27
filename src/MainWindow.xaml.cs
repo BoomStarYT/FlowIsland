@@ -58,6 +58,8 @@ public partial class MainWindow : Window, IIslandHost
     private HorizontalAlignment _alignH = HorizontalAlignment.Center;
     private VerticalAlignment _alignV = VerticalAlignment.Top;
     private IntPtr _hwnd;
+    private bool _blurOn;
+    private Rect _lastRegion = Rect.Empty;
 
     /// <summary>RAM-Begrenzer (wird in den Einstellungen bedient).</summary>
     public RamLimiter Ram { get; }
@@ -136,6 +138,8 @@ public partial class MainWindow : Window, IIslandHost
             _hwnd = new WindowInteropHelper(this).Handle;
             Native.MakeToolWindow(_hwnd);
             ApplyPosition();
+            UpdateBlur();
+            HwndSource.FromHwnd(_hwnd)?.AddHook(WndProc);
         };
         Loaded += (_, _) =>
         {
@@ -229,9 +233,9 @@ public partial class MainWindow : Window, IIslandHost
             SetContentHeight(ExpandedPillHeight(module));
             // Neuer Inhalt gleitet von der Seite rein
             var direction = newIndex >= oldIndex ? 1 : -1;
-            Anim.To(ExpandedSlide, TranslateTransform.XProperty, 0, 420, Anim.Spring, from: 22 * direction);
-            Anim.To(ExpandedHost, OpacityProperty, 1, 200, Anim.Smooth, from: 0);
-            Anim.To(Pill, HeightProperty, ExpandedPillHeight(module), 440, Anim.Spring);
+            Anim.To(ExpandedSlide, TranslateTransform.XProperty, 0, 340, Anim.Spring, from: 40 * direction);
+            Anim.To(ExpandedHost, OpacityProperty, 1, 160, Anim.Smooth, from: 0.15);
+            Anim.To(Pill, HeightProperty, ExpandedPillHeight(module), 380, Anim.Spring);
             SafeCall(module, m => m.OnShown());
         }
     }
@@ -354,15 +358,15 @@ public partial class MainWindow : Window, IIslandHost
                    : _actionsVisible ? ActionsHeight + ExpandedPadding
                    : ExpandedPillHeight(tab!);
         SetContentHeight(height);
-        Anim.To(Pill, WidthProperty, ExpandedWidth, 480, Anim.Spring);
-        Anim.To(Pill, HeightProperty, height, 480, Anim.Spring);
+        Anim.To(Pill, WidthProperty, ExpandedWidth, 420, Anim.Spring);
+        Anim.To(Pill, HeightProperty, height, 420, Anim.Spring);
 
         Anim.To(CompactHost, OpacityProperty, 0, 90, null, () => { if (_expanded) CompactHost.Visibility = Visibility.Collapsed; });
         Anim.To(MediumHost, OpacityProperty, 0, 90, null, () => { if (_expanded) MediumHost.Visibility = Visibility.Collapsed; });
         ExpandedRoot.Visibility = Visibility.Visible;
-        Anim.To(ExpandedRoot, OpacityProperty, 1, 220, Anim.Smooth, delayMs: 60);
-        Anim.To(ExpandedScale, ScaleTransform.ScaleXProperty, 1, 480, Anim.Spring, from: 0.92);
-        Anim.To(ExpandedScale, ScaleTransform.ScaleYProperty, 1, 480, Anim.Spring, from: 0.92);
+        Anim.To(ExpandedRoot, OpacityProperty, 1, 180, Anim.Smooth, delayMs: 40);
+        Anim.To(ExpandedScale, ScaleTransform.ScaleXProperty, 1, 420, Anim.Spring, from: 0.93);
+        Anim.To(ExpandedScale, ScaleTransform.ScaleYProperty, 1, 420, Anim.Spring, from: 0.93);
 
         if (!_actionsVisible && !_alertVisible) SafeCall(tab, m => m.OnShown());
     }
@@ -386,8 +390,8 @@ public partial class MainWindow : Window, IIslandHost
         BeginTransition();
         ApplyCorners();
 
-        Anim.To(Pill, WidthProperty, RestWidth(), 420, Anim.SpringSoft);
-        Anim.To(Pill, HeightProperty, RestHeight(), 420, Anim.SpringSoft);
+        Anim.To(Pill, WidthProperty, RestWidth(), 360, Anim.SpringSoft);
+        Anim.To(Pill, HeightProperty, RestHeight(), 360, Anim.SpringSoft);
 
         Anim.To(ExpandedRoot, OpacityProperty, 0, 100, null, () =>
         {
@@ -877,6 +881,7 @@ public partial class MainWindow : Window, IIslandHost
         Anim.Set(Pill, HeightProperty, vertical ? HandleLength : (animate ? 0 : HandleThickness));
         if (animate) Anim.To(Pill, vertical ? WidthProperty : HeightProperty, HandleThickness, 420, Anim.Spring);
         ApplyCorners();
+        UpdateBlur();
     }
 
     /// <summary>Streifen angeklickt → Insel springt wieder raus (bleibt am Rand angedockt).</summary>
@@ -916,6 +921,7 @@ public partial class MainWindow : Window, IIslandHost
         CompactHost.Visibility = Visibility.Visible;
         Anim.To(CompactHost, OpacityProperty, 1, 260, Anim.Smooth, delayMs: 120, from: 0);
         _ignoreHoverUntilLeave = true;
+        UpdateBlur();
         RefreshCompact();
         if (RestMode == "Offen") Expand();
     }
@@ -1054,6 +1060,8 @@ public partial class MainWindow : Window, IIslandHost
         PillRim.CornerRadius = cr;
         Shadow1.CornerRadius = Grow(cr, 1.5);
         Shadow2.CornerRadius = Grow(cr, 3);
+        _lastRegion = Rect.Empty;
+        UpdateRegion();
     }
 
     private static CornerRadius Grow(CornerRadius c, double d) => new(
@@ -1103,9 +1111,83 @@ public partial class MainWindow : Window, IIslandHost
 
     // ================================================================== Einstellungen
 
+    // ================================================================== Echter Glas-Blur
+
+    /// <summary>
+    /// Bei Glas: Windows macht hinter der Insel alles unscharf. Damit das nur hinter der Insel passiert
+    /// (und nicht im ganzen Fenster), bekommt das Fenster genau die Form der Insel – auch während Animationen.
+    /// </summary>
+    private void UpdateBlur()
+    {
+        if (_hwnd == IntPtr.Zero) return;
+        var want = Theme.BlurWanted(_settings) && !Tucked && !_hiddenForFullscreen;
+        if (want == _blurOn) { if (want) UpdateRegion(); return; }
+        _blurOn = want;
+        if (want)
+        {
+            Pill.LayoutUpdated += OnPillLayout;
+            UpdateRegion();
+            Native.SetBlur(_hwnd, true);
+        }
+        else
+        {
+            Pill.LayoutUpdated -= OnPillLayout;
+            Native.SetBlur(_hwnd, false);
+            Native.ClearRegion(_hwnd);
+            _lastRegion = Rect.Empty;
+        }
+    }
+
+    private void OnPillLayout(object? sender, EventArgs e) => UpdateRegion();
+
+    private void UpdateRegion()
+    {
+        if (!_blurOn || !Pill.IsLoaded) return;
+        Rect r;
+        try { r = Pill.TransformToAncestor(Root).TransformBounds(new Rect(Pill.RenderSize)); }
+        catch { return; }
+        var d = DeviceScale();
+        var px = new Rect(Math.Round(r.X * d), Math.Round(r.Y * d), Math.Round(r.Width * d), Math.Round(r.Height * d));
+        if (px == _lastRegion) return;
+        _lastRegion = px;
+        var cr = PillBg.CornerRadius;
+        var radius = Math.Max(Math.Max(cr.TopLeft, cr.TopRight), Math.Max(cr.BottomLeft, cr.BottomRight)) * Scale * d;
+        Native.SetRoundRegion(_hwnd, (int)px.Left, (int)px.Top, (int)px.Right, (int)px.Bottom, (int)Math.Round(radius * 2), Edge);
+    }
+
+    // ================================================================== Wischen (Touchpad) = Tab wechseln
+
+    private double _swipe;
+    private DateTime _lastSwipe = DateTime.MinValue;
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const int WM_MOUSEHWHEEL = 0x020E;
+        if (msg != WM_MOUSEHWHEEL || !_expanded || _actionsVisible || _alertVisible || _tabs.Count < 2) return IntPtr.Zero;
+
+        var delta = (short)((long)wParam >> 16 & 0xFFFF);
+        // Nach einem Wechsel kurz warten, sonst springt man bei einem Wisch mehrere Tabs weiter
+        if ((DateTime.UtcNow - _lastSwipe).TotalMilliseconds < 380) { handled = true; return IntPtr.Zero; }
+        if (Math.Sign(delta) != Math.Sign(_swipe)) _swipe = 0;
+        _swipe += delta;
+        if (Math.Abs(_swipe) >= 90)
+        {
+            var dir = _swipe > 0 ? 1 : -1;
+            _swipe = 0;
+            _lastSwipe = DateTime.UtcNow;
+            var index = _activeTab == null ? 0 : _tabs.IndexOf(_activeTab);
+            var next = Math.Clamp(index + dir, 0, _tabs.Count - 1);
+            if (next != index) SelectTab(_tabs[next]);
+            else Anim.To(ExpandedSlide, TranslateTransform.XProperty, 0, 380, Anim.Spring, from: -10 * dir); // Ende: kleines Zurückfedern
+        }
+        handled = true;
+        return IntPtr.Zero;
+    }
+
     private void ApplySettings()
     {
         Theme.Apply(_settings, PillBg, PillSheen, PillRim, PillShadow);
+        UpdateBlur();
         if (Tucked) ApplyTuckLook(true);
         try { FontFamily = new FontFamily($"{_settings.Schriftart}, Segoe UI"); }
         catch (Exception ex) { App.Log(ex); }
@@ -1250,11 +1332,13 @@ public partial class MainWindow : Window, IIslandHost
             _hiddenForFullscreen = true;
             Collapse(force: true);
             Hide();
+            UpdateBlur();
         }
         else if (!fullscreen && _hiddenForFullscreen)
         {
             _hiddenForFullscreen = false;
             Show();
+            UpdateBlur();
             if (RestMode == "Offen") Expand();
         }
     }

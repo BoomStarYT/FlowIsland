@@ -62,7 +62,7 @@ public static class CoverColors
 
             // Auf dunklem Hintergrund gut sichtbar machen
             var (hh, ss, ll) = Theme.ToHsl(pick);
-            return Theme.FromHsl(hh, Math.Clamp(ss * 1.15, 0.45, 0.95), Math.Clamp(ll, 0.56, 0.70));
+            return Theme.FromHsl(hh, Math.Clamp(ss * 0.85, 0.28, 0.62), Math.Clamp(ll, 0.62, 0.74)); // sanft statt neon
         }
         catch (Exception ex)
         {
