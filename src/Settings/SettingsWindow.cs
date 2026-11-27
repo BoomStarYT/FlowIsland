@@ -68,6 +68,7 @@ public sealed class SettingsWindow : Window
         ["Musik"] = "Song, Cover, Fortschritt, Lyrics und Steuerung",
         ["Aufgaben"] = "To-dos mit Erinnerung – die Insel meldet sich, wenn etwas fällig ist",
         ["Wetter"] = "Wetter von heute mit kleiner Vorschau",
+        ["Zwischenablage"] = "Deine letzten kopierten Texte, Bilder und Dateien – nur auf diesem PC",
         ["Kontrollzentrum"] = "Lautstärke, Helligkeit, WLAN, Bluetooth, Kamera …",
         ["Apps"] = "Schnellstart-Kacheln für Apps und Ordner",
         ["Tasten"] = "Spickzettel für Tastenkürzel",
@@ -881,6 +882,29 @@ public sealed class SettingsWindow : Window
         }
         ccRows.Add(Info($"Bis zu {Island.Modules.ControlModule.MaxButtons} Knöpfe. Tipp: Rechtsklick auf einen Knopf in der Insel öffnet die passende Windows-Einstellung."));
         p.Children.Add(Card(ccRows.ToArray()));
+        // ---------- Zwischenablage
+        p.Children.Add(SectionTitle("Zwischenablage"));
+        var keepOptions = new (string Label, int Hours)[] { ("1 Std", 1), ("1 Tag", 24), ("7 Tage", 168), ("30 Tage", 720), ("Immer", 0) };
+        var keepNow = keepOptions.FirstOrDefault(k => k.Hours == _s.ZwAufbewahrenStunden).Label ?? "7 Tage";
+        p.Children.Add(Card(
+            Row("Speicher höchstens", "Werden es mehr, fliegen die ältesten Einträge raus", SliderControl(1, 200, _s.ZwMaxMb, v => $"{v:0} MB",
+                v => { _s.ZwMaxMb = (int)v; _s.NotifyChangedSoon(); }, 1), glyph: "\uE7F1"),
+            Row("Einträge höchstens", null, SliderControl(5, 200, _s.ZwMaxEintraege, v => $"{v:0}",
+                v => { _s.ZwMaxEintraege = (int)v; _s.NotifyChangedSoon(); }, 5), glyph: "\uE8FD"),
+            Row("Aufbewahren", "Ältere Einträge werden automatisch gelöscht", null,
+                below: Segmented(keepOptions.Select(k => k.Label).ToArray(), keepNow, v =>
+                {
+                    _s.ZwAufbewahrenStunden = keepOptions.First(k => k.Label == v).Hours;
+                    _s.NotifyChanged();
+                }), glyph: "\uE823"),
+            Row("Bilder merken", "Screenshots & kopierte Bilder (brauchen mehr Speicher)", Toggle(_s.ZwBilder, v => { _s.ZwBilder = v; _s.NotifyChanged(); }), glyph: "\uE91B"),
+            Row("Auf der Festplatte merken", "Aus = nur bis zum Beenden im Arbeitsspeicher, nichts wird gespeichert",
+                Toggle(_s.ZwSpeichern, v => { _s.ZwSpeichern = v; _s.NotifyChanged(); }), glyph: "\uE74E"),
+            Row("Beim Beenden alles löschen", null, Toggle(_s.ZwBeimBeendenLoeschen, v => { _s.ZwBeimBeendenLoeschen = v; _s.NotifyChanged(); }), glyph: "\uE74D"),
+            Row("Verlauf jetzt löschen", "Löscht alle gemerkten Einträge sofort", Btn("Löschen", "Danger", () => Island.Modules.ClipboardModule.RequestClear()), glyph: "\uE74D"),
+            Info("Alles bleibt lokal im Ordner „zwischenablage“ neben der App – nichts geht ins Internet. " +
+                 "Passwörter aus Passwort-Managern werden nie gespeichert (die melden Windows „nicht merken“).")));
+
         p.Children.Add(Sub("Eigene Funktionen kannst du als Modul hinzufügen – wie, steht in LIES-MICH.md."));
     }
 

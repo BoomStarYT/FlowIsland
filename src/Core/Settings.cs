@@ -145,6 +145,21 @@ public sealed class Settings
     /// <summary>Lautstärke- und Helligkeitsregler im Kontrollzentrum zeigen.</summary>
     public bool KontrollRegler { get; set; } = true;
 
+    // ------------------------------------------------------------------ Zwischenablage (alles lokal)
+
+    /// <summary>Auf der Festplatte merken (sonst nur bis zum Beenden im Arbeitsspeicher).</summary>
+    public bool ZwSpeichern { get; set; } = true;
+    /// <summary>Maximaler Speicher in MB (Texte + Bilder).</summary>
+    public int ZwMaxMb { get; set; } = 20;
+    /// <summary>Wie viele Einträge höchstens.</summary>
+    public int ZwMaxEintraege { get; set; } = 50;
+    /// <summary>Nach so vielen Stunden automatisch löschen (0 = nie).</summary>
+    public int ZwAufbewahrenStunden { get; set; } = 24 * 7;
+    /// <summary>Beim Beenden der Insel alles löschen.</summary>
+    public bool ZwBeimBeendenLoeschen { get; set; }
+    /// <summary>Auch Bilder (Screenshots) merken.</summary>
+    public bool ZwBilder { get; set; } = true;
+
     /// <summary>Ordner für Apps (Reihenfolge = Anzeige).</summary>
     public List<string> AppOrdner { get; set; } = new();
 
