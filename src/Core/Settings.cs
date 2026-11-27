@@ -41,6 +41,9 @@ public sealed class Settings
     /// <summary>Eigene Farbe für den Fortschrittsbalken ("" = Akzentfarbe).</summary>
     public string FortschrittFarbe { get; set; } = "";
 
+    /// <summary>Liquid Glass: Tönung automatisch aus dem Cover des laufenden Songs.</summary>
+    public bool GlasVomCover { get; set; }
+
     /// <summary>Glas-Stile: echte Unschärfe hinter der Insel (Windows-Blur).</summary>
     public bool EchterBlur { get; set; } = true;
 
@@ -309,6 +312,8 @@ public sealed class DesignEintrag
     public double? Rundung { get; set; }
     public bool? Schatten { get; set; }
     public string? Schriftart { get; set; }
+    public bool? GlasVomCover { get; set; }
+    public bool? AkzentVomCover { get; set; }
 
     public static DesignEintrag From(Settings s, string name) => new()
     {
@@ -323,6 +328,8 @@ public sealed class DesignEintrag
         Rundung = s.Rundung,
         Schatten = s.Schatten,
         Schriftart = s.Schriftart,
+        GlasVomCover = s.GlasVomCover,
+        AkzentVomCover = s.AkzentVomCover,
     };
 
     public void ApplyTo(Settings s)
@@ -337,5 +344,7 @@ public sealed class DesignEintrag
         if (Rundung is double r) s.Rundung = r;
         if (Schatten is bool sh) s.Schatten = sh;
         if (!string.IsNullOrWhiteSpace(Schriftart)) s.Schriftart = Schriftart!;
+        s.GlasVomCover = GlasVomCover ?? false;
+        if (AkzentVomCover is bool av) s.AkzentVomCover = av;
     }
 }

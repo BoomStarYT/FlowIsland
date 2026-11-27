@@ -41,6 +41,7 @@ public sealed class SettingsWindow : Window
         P("Cover-Farben", Theme.Cover, "#0C0C0F", "#0C0C0F", "#E58FA0"),
         P("Klarglas", Theme.PureGlass, "#FFFFFF", "#FFFFFF", "#FFFFFF", klarheit: 1.0),
         P("Milchglas", Theme.PureGlass, "#FFFFFF", "#FFFFFF", "#7F9CD6", klarheit: 0.05),
+        new DesignEintrag { Name = "Liquid Cover", Stil = Theme.Glass, Farbe1 = "#1A1A22", Farbe2 = "#1A1A22", Akzent = "#F5F5F7", GlasKlarheit = 0.45, GlasVomCover = true, AkzentVomCover = true },
         P("Liquid Glass", Theme.Glass, "#16161D", "#16161D", "#9CC8E0", 0.5, klarheit: 0.35),
         P("Frost", Theme.Glass, "#F2F2F7", "#F2F2F7", "#6E8FC7", 0.6, klarheit: 0.15),
         P("Graphit", Theme.Gradient, "#232526", "#414345", "#E2C98A"),
@@ -488,7 +489,14 @@ public sealed class SettingsWindow : Window
                 v => v >= 85 ? "Ganz klar" : v <= 15 ? "Milchglas" : $"{v:0} % klar",
                 v => { _s.GlasKlarheit = v / 100; _s.NotifyChanged(); }, 5, enabled: true)));
             if (_s.Stil == Theme.Glass)
-                style.Add(Row("Glas-Tönung", null, null, below: ColorPicker(_s.Farbe1, v => { _s.Farbe1 = v; _s.NotifyChanged(); })));
+            {
+                style.Add(Row("Farbe vom Song-Cover", "Das Glas färbt sich passend zum Song, der gerade läuft – wechselt sanft bei jedem Song",
+                    Toggle(_s.GlasVomCover, v => { _s.GlasVomCover = v; _s.NotifyChanged(); RebuildPage(); }), glyph: "\uE790"));
+                if (!_s.GlasVomCover)
+                    style.Add(Row("Glas-Tönung", null, null, below: ColorPicker(_s.Farbe1, v => { _s.Farbe1 = v; _s.NotifyChanged(); })));
+                else
+                    style.Add(Info("Ohne Musik nimmt das Glas diese Farbe: " + _s.Farbe1 + " (ändern: Schalter kurz aus)."));
+            }
             style.Add(Row("Echte Unschärfe", "Windows macht hinter der Insel alles weich (wie im Foto). Aus = nur durchsichtig.",
                 Toggle(_s.EchterBlur, v => { _s.EchterBlur = v; _s.NotifyChanged(); }), glyph: "\uE753"));
             style.Add(Row("Cover im Glas-Look", "Album-Cover farblos und leicht durchsichtig – alles wirkt einheitlich",

@@ -1284,7 +1284,7 @@ public partial class MainWindow : Window, IIslandHost
 
     private void OnCoverChanged()
     {
-        if (!_settings.AkzentVomCover && _settings.Stil != Theme.Cover) return;
+        if (!Theme.DependsOnCover(_settings)) return;
         Theme.Apply(_settings, PillBg, PillSheen, PillRim, PillShadow);
         if (Tucked) ApplyTuckLook(true);
         _lyricsWin?.ApplyLook();

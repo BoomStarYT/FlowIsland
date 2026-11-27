@@ -51,57 +51,55 @@ public static class Theme
         var blur = BlurWanted(s);
         Brush? noise = null;
 
-        if (style == PureGlass)
+        if (style == PureGlass || style == Glass)
         {
-            // Reines Glas ohne Farbe. Wolkig = milchig (mit echtem Blur), klar = wirklich durchsichtig.
-            double topA = blur ? Lerp(0.40, 0.07, clear) : Lerp(0.72, 0.04, clear);
-            double botA = blur ? Lerp(0.28, 0.03, clear) : Lerp(0.56, 0.02, clear);
-            var darkA = blur ? Lerp(0.05, 0.14, clear) : Lerp(0.0, 0.16, clear);
-            var top = Over(Colors.White, topA, Colors.Black, darkA);
-            var bottom = Over(Colors.White, botA, Colors.Black, darkA);
+            // Liquid Glass: fast durchsichtige Mitte, Licht sammelt sich an den Kanten (wie eine dicke Glaslinse),
+            // heller Glanz oben, Reflex unten. Wolkig = mattiert mit Blur, klar = wirklich durchsichtig.
+            var tinted = style == Glass;
+            var tint = tinted ? GlassTint(s, c1) : Colors.White;
+
+            double topA, botA;
+            if (tinted)
+            {
+                topA = blur ? Lerp(0.34, 0.05, clear) : Lerp(0.62, 0.05, clear);
+                botA = blur ? Lerp(0.44, 0.09, clear) : Lerp(0.74, 0.08, clear);
+            }
+            else
+            {
+                topA = blur ? Lerp(0.30, 0.04, clear) : Lerp(0.60, 0.03, clear);
+                botA = blur ? Lerp(0.20, 0.02, clear) : Lerp(0.46, 0.015, clear);
+            }
+            // Ein Hauch Dunkel darunter, damit weisse Schrift auch auf hellem Hintergrund lesbar bleibt
+            var darkA = Lerp(blur ? 0.04 : 0.0, 0.12, clear);
+            var top = Over(tinted ? Lighten(tint, 0.18) : Colors.White, topA, Colors.Black, darkA);
+            var bottom = Over(tint, botA, Colors.Black, darkA);
             fill = Freeze(Linear(90, (top, 0), (bottom, 1)));
 
-            sheenBrush = Freeze(Linear(90,
-                (WithAlpha(Colors.White, (byte)Lerp(60, 110, clear)), 0.00),
-                (WithAlpha(Colors.White, (byte)Lerp(14, 26, clear)), 0.30),
-                (WithAlpha(Colors.White, 0), 0.52),
-                (WithAlpha(Colors.White, 0), 0.80),
-                (WithAlpha(Colors.White, (byte)Lerp(14, 40, clear)), 1.00)));
+            var edge = tinted ? Lighten(tint, 0.55) : Colors.White;
+            sheenBrush = Freeze(Layers(
+                // Linsen-Effekt: Kanten heller als die Mitte
+                Radial(new Point(0.5, 0.5), 0.72, 0.9,
+                    (WithAlpha(edge, 0), 0), (WithAlpha(edge, 0), 0.6), (WithAlpha(edge, (byte)Lerp(46, 70, clear)), 1)),
+                // Glanzbogen oben + Lichtreflex unten
+                Linear(90,
+                    (WithAlpha(Colors.White, (byte)Lerp(95, 130, clear)), 0.00),
+                    (WithAlpha(Colors.White, (byte)Lerp(22, 30, clear)), 0.20),
+                    (WithAlpha(Colors.White, 0), 0.42),
+                    (WithAlpha(Colors.White, 0), 0.82),
+                    (WithAlpha(edge, (byte)Lerp(20, 46, clear)), 1.00)),
+                // Spiegelung oben links (wie Licht auf Glas)
+                Radial(new Point(0.12, 0.0), 0.35, 0.9, (WithAlpha(Colors.White, (byte)Lerp(40, 70, clear)), 0), (WithAlpha(Colors.White, 0), 1))));
 
-            rimBrush = Freeze(Linear(120,
-                (WithAlpha(Colors.White, 235), 0.00),
-                (WithAlpha(Colors.White, 60), 0.35),
-                (WithAlpha(Colors.White, 24), 0.65),
-                (WithAlpha(Colors.White, 170), 1.00)));
-            rimThickness = 1.4;
-            noise = Noise((1 - clear) * 0.6);
-            // Sehr milchig → dunkle Schrift, sonst helle Schrift
-            reference = topA > 0.45 ? Colors.White : Colors.Black;
-        }
-        else if (style == Glass)
-        {
-            // Getöntes Glas: gleiche Wolkig↔Klar-Logik, aber mit Farbe
-            double topA = blur ? Lerp(0.58, 0.12, clear) : Lerp(0.88, 0.10, clear);
-            double botA = blur ? Lerp(0.68, 0.16, clear) : Lerp(0.94, 0.14, clear);
-            fill = Freeze(Linear(90,
-                (WithAlpha(Lighten(c1, 0.10), (byte)(255 * topA)), 0),
-                (WithAlpha(c1, (byte)(255 * botA)), 1)));
-
-            sheenBrush = Freeze(Linear(90,
-                (WithAlpha(Colors.White, 82), 0.00),
-                (WithAlpha(Colors.White, 26), 0.32),
-                (WithAlpha(Colors.White, 0), 0.55),
-                (WithAlpha(Colors.White, 0), 0.82),
-                (WithAlpha(Colors.White, 18), 1.00)));
-
-            rimBrush = Freeze(Linear(120,
-                (WithAlpha(Colors.White, 200), 0.00),
-                (WithAlpha(Colors.White, 44), 0.35),
-                (WithAlpha(Colors.White, 16), 0.65),
-                (WithAlpha(Colors.White, 120), 1.00)));
-            rimThickness = 1.2;
-            noise = Noise((1 - clear) * 0.45);
-            reference = topA > 0.45 ? c1 : Colors.Black;
+            // Lichtkante: oben links sehr hell, seitlich dünn, unten rechts wieder heller (leicht in der Glasfarbe)
+            rimBrush = Freeze(Linear(115,
+                (WithAlpha(Colors.White, 250), 0.00),
+                (WithAlpha(Colors.White, 90), 0.18),
+                (WithAlpha(edge, 26), 0.50),
+                (WithAlpha(edge, 60), 0.80),
+                (WithAlpha(edge, 200), 1.00)));
+            rimThickness = 1.5;
+            noise = Noise((1 - clear) * (tinted ? 0.4 : 0.55));
+            reference = topA > 0.45 ? (tinted ? tint : Colors.White) : Colors.Black;
         }
         else if (style == Cover)
         {
@@ -168,6 +166,13 @@ public static class Theme
     }
 
     public static bool IsGlass(Settings s) => s.Stil is Glass or PureGlass;
+
+    /// <summary>Glas-Farbe: eigene Tönung – oder (wenn gewünscht) die Farbe vom Song-Cover.</summary>
+    private static Color GlassTint(Settings s, Color own)
+        => s.GlasVomCover && CoverColor is Color c ? Blend(c, Color.FromRgb(20, 20, 26), 0.25) : own;
+
+    /// <summary>Muss sich die Insel neu einfärben, wenn ein anderer Song läuft?</summary>
+    public static bool DependsOnCover(Settings s) => s.AkzentVomCover || s.Stil == Cover || (s.Stil == Glass && s.GlasVomCover);
 
     /// <summary>Echter Windows-Blur: nur bei Glas, eingeschaltet und nicht ganz klar.</summary>
     public static bool BlurWanted(Settings s) => s.EchterBlur && IsGlass(s) && s.GlasKlarheit < 0.85;
